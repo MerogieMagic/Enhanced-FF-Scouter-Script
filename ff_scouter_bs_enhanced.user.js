@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.86
+// @version      2.87
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -22,7 +22,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.86;
+    const SCRIPT_VERSION = 2.87;
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
 
@@ -274,9 +274,9 @@
             right: 0px !important;
             font-size: 9px !important;
             line-height: 9.5px !important;
-            color: rgba(255, 255, 255, 0.77) !important;
-            background-color: var(--ff-badge-bg, rgba(0, 0, 0, 0.77)) !important;
-            opacity: 0.77 !important;
+            color: #ffffff !important;
+            background-color: var(--ff-badge-bg, rgba(0, 0, 0, 0.92)) !important;
+            opacity: 0.95 !important;
             backdrop-filter: blur(2px);
             -webkit-backdrop-filter: blur(2px);
             padding: 0px 3px 1px 3px !important;
@@ -738,7 +738,7 @@
                 tier: 'unrated',
                 color: 'rgba(160, 160, 160, 0.4)',
                 glow: 'rgba(160, 160, 160, 0.15)',
-                badgeBg: 'rgba(60, 60, 60, 0.77)',
+                badgeBg: 'rgba(60, 60, 60, 0.92)',
                 tooltip: 'Est. BS: Unrated / No Data'
             };
         }
@@ -760,7 +760,7 @@
                     tier: 'very_easy',
                     color: '#38bdf8',
                     glow: 'rgba(56, 189, 248, 0.45)',
-                    badgeBg: 'rgba(56, 189, 248, 0.77)',
+                    badgeBg: 'rgba(56, 189, 248, 0.92)',
                     tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Very Easy Target)`
                 };
             } else if (ff < 2.2) {
@@ -768,7 +768,7 @@
                     tier: 'easy',
                     color: '#2563eb',
                     glow: 'rgba(37, 99, 235, 0.45)',
-                    badgeBg: 'rgba(37, 99, 235, 0.77)',
+                    badgeBg: 'rgba(37, 99, 235, 0.92)',
                     tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Easy Match)`
                 };
             } else if (ff < 3.2) {
@@ -776,7 +776,7 @@
                     tier: 'moderate',
                     color: '#4ade80',
                     glow: 'rgba(74, 222, 128, 0.45)',
-                    badgeBg: 'rgba(74, 222, 128, 0.77)',
+                    badgeBg: 'rgba(74, 222, 128, 0.92)',
                     tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Moderate Match)`
                 };
             } else if (ff < 4.2) {
@@ -784,7 +784,7 @@
                     tier: 'mod_difficult',
                     color: '#f97316',
                     glow: 'rgba(249, 115, 22, 0.45)',
-                    badgeBg: 'rgba(249, 115, 22, 0.77)',
+                    badgeBg: 'rgba(249, 115, 22, 0.92)',
                     tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Moderate Challenge)`
                 };
             } else {
@@ -792,7 +792,7 @@
                     tier: 'cannot_win',
                     color: '#dc2626',
                     glow: 'rgba(220, 38, 38, 0.55)',
-                    badgeBg: 'rgba(220, 38, 38, 0.77)',
+                    badgeBg: 'rgba(220, 38, 38, 0.92)',
                     tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Cannot Win - Skip!)`
                 };
             }
@@ -802,15 +802,15 @@
         if (bsNum !== null) {
             const formatted = formatBattleStats(bsNum);
             if (bsNum < 5e6) {
-                return { tier: 'very_easy', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.77)', tooltip: `Est. BS: ~${formatted} (Very Easy Target)` };
+                return { tier: 'very_easy', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.92)', tooltip: `Est. BS: ~${formatted} (Very Easy Target)` };
             } else if (bsNum < 15e6) {
-                return { tier: 'easy', color: '#2563eb', glow: 'rgba(37, 99, 235, 0.45)', badgeBg: 'rgba(37, 99, 235, 0.77)', tooltip: `Est. BS: ~${formatted} (Easy Match)` };
+                return { tier: 'easy', color: '#2563eb', glow: 'rgba(37, 99, 235, 0.45)', badgeBg: 'rgba(37, 99, 235, 0.92)', tooltip: `Est. BS: ~${formatted} (Easy Match)` };
             } else if (bsNum < 40e6) {
-                return { tier: 'moderate', color: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)', badgeBg: 'rgba(74, 222, 128, 0.77)', tooltip: `Est. BS: ~${formatted} (Moderate Match)` };
+                return { tier: 'moderate', color: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)', badgeBg: 'rgba(74, 222, 128, 0.92)', tooltip: `Est. BS: ~${formatted} (Moderate Match)` };
             } else if (bsNum < 150e6) {
-                return { tier: 'mod_difficult', color: '#f97316', glow: 'rgba(249, 115, 22, 0.45)', badgeBg: 'rgba(249, 115, 22, 0.77)', tooltip: `Est. BS: ~${formatted} (Moderate Challenge)` };
+                return { tier: 'mod_difficult', color: '#f97316', glow: 'rgba(249, 115, 22, 0.45)', badgeBg: 'rgba(249, 115, 22, 0.92)', tooltip: `Est. BS: ~${formatted} (Moderate Challenge)` };
             } else {
-                return { tier: 'cannot_win', color: '#dc2626', glow: 'rgba(220, 38, 38, 0.55)', badgeBg: 'rgba(220, 38, 38, 0.77)', tooltip: `Est. BS: ~${formatted} (Cannot Win - Skip!)` };
+                return { tier: 'cannot_win', color: '#dc2626', glow: 'rgba(220, 38, 38, 0.55)', badgeBg: 'rgba(220, 38, 38, 0.92)', tooltip: `Est. BS: ~${formatted} (Cannot Win - Skip!)` };
             }
         }
 

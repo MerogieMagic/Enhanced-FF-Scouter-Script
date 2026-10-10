@@ -1022,6 +1022,20 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 00:44:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 65
+- **Focus**: Battle Stats Translucency Reduction & Contrast Solidification (`v2.87`).
+  - **Actions Executed**:
+    1. *Badge CSS Solidification*:
+       - Updated `.ff-scouter-bs-badge` opacity from `0.77` to `0.95` with solid `#ffffff` text and `rgba(0, 0, 0, 0.92)` fallback background.
+    2. *Threat Badge Background Opacity*:
+       - Updated all `badgeBg` color values in `get_target_threat_info` from `0.77` alpha to `0.92` alpha across all Fair Fight and absolute tiers.
+    3. *Version Bump & Git Sync*:
+       - Bumped script version to `v2.87`.
+  - **Verification**: Verified JavaScript syntax via `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-11 00:46:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
