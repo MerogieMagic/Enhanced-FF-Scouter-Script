@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.87
+// @version      2.88
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -22,7 +22,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.87;
+    const SCRIPT_VERSION = 2.88;
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
 
@@ -114,6 +114,24 @@
         apiKey = "";
     }
 
+    let myTotalBattleStats = parseFloat(rD_getValue(currentUserId ? `my_bs_${currentUserId}` : 'my_bs', '0')) || null;
+
+    async function fetchMyBattleStats() {
+        if (!apiKey || myTotalBattleStats) return;
+        try {
+            const url = `https://api.torn.com/user/?selections=battlestats&key=${apiKey}&comment=FFScouterSelf`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.total) {
+                    myTotalBattleStats = data.total;
+                    if (currentUserId) rD_setValue(`my_bs_${currentUserId}`, String(data.total));
+                    rD_setValue('my_bs', String(data.total));
+                }
+            }
+        } catch (e) {}
+    }
+
     function setApiKey(newKey) {
         if (newKey !== null) {
             newKey = newKey.trim();
@@ -122,7 +140,11 @@
             rD_setValue('limited_key', newKey);
             rD_setValue('torn_api_key', newKey);
             try { localStorage.setItem("twse-config-apikey", newKey); } catch(e){}
+            myTotalBattleStats = null;
+            if (currentUserId) rD_deleteValue(`my_bs_${currentUserId}`);
+            rD_deleteValue('my_bs');
             clearEvaluationCache();
+            fetchMyBattleStats();
             window.location.reload();
         }
     }
@@ -133,12 +155,40 @@
             setApiKey(userInput);
         });
 
+        GM_registerMenuCommand('🎯 Set / Calibrate My Battle Stats (Optional)', () => {
+            const currentFormatted = myTotalBattleStats ? formatBattleStats(myTotalBattleStats) : 'Auto';
+            let userInput = prompt(`Enter your Total Battle Stats (e.g. 200, 50k, 25m, 26b) for relative scaling:\n(Leave blank to auto-detect via API)`, currentFormatted);
+            if (userInput !== null) {
+                userInput = userInput.trim();
+                const parsed = parseBsStringToNumber(userInput);
+                if (parsed && parsed > 0) {
+                    myTotalBattleStats = parsed;
+                    if (currentUserId) rD_setValue(`my_bs_${currentUserId}`, String(parsed));
+                    rD_setValue('my_bs', String(parsed));
+                    showToast(`My Battle Stats calibrated to ~${formatBattleStats(parsed)}`);
+                } else {
+                    myTotalBattleStats = null;
+                    if (currentUserId) rD_deleteValue(`my_bs_${currentUserId}`);
+                    rD_deleteValue('my_bs');
+                    showToast("Battle stats set to Auto-Detect via API.");
+                    fetchMyBattleStats();
+                }
+                clearEvaluationCache();
+                window.location.reload();
+            }
+        });
+
         GM_registerMenuCommand('🗑️ Clear Cached Stats & Reset Key', () => {
             if (confirm("Clear stored API key and all cached player stat evaluations?")) {
                 apiKey = "";
-                if (currentUserId) rD_deleteValue(`limited_key_${currentUserId}`);
+                myTotalBattleStats = null;
+                if (currentUserId) {
+                    rD_deleteValue(`limited_key_${currentUserId}`);
+                    rD_deleteValue(`my_bs_${currentUserId}`);
+                }
                 rD_deleteValue('limited_key');
                 rD_deleteValue('torn_api_key');
+                rD_deleteValue('my_bs');
                 try { localStorage.removeItem("twse-config-apikey"); } catch(e){}
                 clearEvaluationCache();
                 showToast("Cache and API key cleared!");
@@ -798,20 +848,31 @@
             }
         }
 
-        // 2. Fallback: Absolute Battle Stats when FF multiplier is unavailable
-        if (bsNum !== null) {
-            const formatted = formatBattleStats(bsNum);
-            if (bsNum < 5e6) {
-                return { tier: 'very_easy', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.92)', tooltip: `Est. BS: ~${formatted} (Very Easy Target)` };
-            } else if (bsNum < 15e6) {
-                return { tier: 'easy', color: '#2563eb', glow: 'rgba(37, 99, 235, 0.45)', badgeBg: 'rgba(37, 99, 235, 0.92)', tooltip: `Est. BS: ~${formatted} (Easy Match)` };
-            } else if (bsNum < 40e6) {
-                return { tier: 'moderate', color: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)', badgeBg: 'rgba(74, 222, 128, 0.92)', tooltip: `Est. BS: ~${formatted} (Moderate Match)` };
-            } else if (bsNum < 150e6) {
-                return { tier: 'mod_difficult', color: '#f97316', glow: 'rgba(249, 115, 22, 0.45)', badgeBg: 'rgba(249, 115, 22, 0.92)', tooltip: `Est. BS: ~${formatted} (Moderate Challenge)` };
+        // 2. Relative Ratio Scaling when user's own battle stats are known
+        if (bsNum !== null && myTotalBattleStats && myTotalBattleStats > 0) {
+            const ratio = bsNum / myTotalBattleStats;
+            if (ratio < 0.25) {
+                return { tier: 'very_easy', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.92)', tooltip: `${formattedBs} (${(ratio * 100).toFixed(0)}% of your stats • Very Easy)` };
+            } else if (ratio < 0.75) {
+                return { tier: 'easy', color: '#2563eb', glow: 'rgba(37, 99, 235, 0.45)', badgeBg: 'rgba(37, 99, 235, 0.92)', tooltip: `${formattedBs} (${(ratio * 100).toFixed(0)}% of your stats • Easy Match)` };
+            } else if (ratio < 1.35) {
+                return { tier: 'moderate', color: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)', badgeBg: 'rgba(74, 222, 128, 0.92)', tooltip: `${formattedBs} (${(ratio * 100).toFixed(0)}% of your stats • Moderate Match)` };
+            } else if (ratio < 2.50) {
+                return { tier: 'mod_difficult', color: '#f97316', glow: 'rgba(249, 115, 22, 0.45)', badgeBg: 'rgba(249, 115, 22, 0.92)', tooltip: `${formattedBs} (${ratio.toFixed(1)}x your stats • Challenging)` };
             } else {
-                return { tier: 'cannot_win', color: '#dc2626', glow: 'rgba(220, 38, 38, 0.55)', badgeBg: 'rgba(220, 38, 38, 0.92)', tooltip: `Est. BS: ~${formatted} (Cannot Win - Skip!)` };
+                return { tier: 'cannot_win', color: '#dc2626', glow: 'rgba(220, 38, 38, 0.55)', badgeBg: 'rgba(220, 38, 38, 0.92)', tooltip: `${formattedBs} (${ratio.toFixed(1)}x your stats • Cannot Win - Skip!)` };
             }
+        }
+
+        // 3. Fallback: Unrated when neither FF nor user stats are available
+        if (bsNum !== null) {
+            return {
+                tier: 'unrated',
+                color: 'rgba(160, 160, 160, 0.4)',
+                glow: 'rgba(160, 160, 160, 0.15)',
+                badgeBg: 'rgba(60, 60, 60, 0.92)',
+                tooltip: `${formattedBs} (Set API Key or calibrate stats for relative scaling)`
+            };
         }
 
         return null;
@@ -1849,6 +1910,7 @@
 
     // --- Main Observer & Lifecycle ---
     create_text_location();
+    fetchMyBattleStats();
 
     const match1 = window.location.href.match(/https:\/\/www\.torn\.com\/profiles\.php\?XID=(?<target_id>\d+)/);
     const match2 = window.location.href.match(/https:\/\/www\.torn\.com\/(?:loader|page)\.php\?sid=attack&user2ID=(?<target_id>\d+)/);

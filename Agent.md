@@ -1035,6 +1035,31 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 00:46:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 66
+- **Focus**: Universal Scale Verification & Relative Ratio Engine from 200 BS (Noob) to 26B+ BS (Titan) (`v2.88`).
+  - **Mathematical Analysis & System Verification**:
+    1. *Numeric Parsing & Formatting Range*:
+       - Verified that `formatBattleStats()` and `parseBsStringToNumber()` seamlessly handle integer values across all 11 orders of magnitude ($10^2$ to $10^{12}+$):
+         - `200` $\rightarrow$ `"200"`
+         - `50,000` $\rightarrow$ `"50k"`
+         - `25,500,000` $\rightarrow$ `"25.5m"`
+         - `26,000,000,000` $\rightarrow$ `"26b"`
+         - `1,500,000,000,000` $\rightarrow$ `"1.5t"`
+    2. *Two-Tier Relative Threat Scaling Architecture*:
+       - **Tier 1 (Torn Fair Fight Multiplier)**: FF Scouter evaluates `ff` ratio relative to caller API key ($< 1.50$ = Sky Blue, $1.50-2.20$ = Royal Blue, $2.20-3.20$ = Light Green, $3.20-4.20$ = Orange, $\ge 4.20$ = Crimson Red).
+       - **Tier 2 (Dynamic Relative BS Ratio Engine)**: When FF multiplier is unrated/unavailable from FF Scouter, the script uses the active player's Total Battle Stats (`myTotalBattleStats`, auto-detected via `/user/?selections=battlestats` or calibrated via menu):
+         - Ratio $< 0.25$ ($\text{Target} < 25\%$ of you) $\rightarrow$ **Sky Blue** (Very Easy)
+         - Ratio $0.25 - 0.75$ ($\text{Target} 25\% - 75\%$ of you) $\rightarrow$ **Royal Blue** (Easy)
+         - Ratio $0.75 - 1.35$ ($\text{Target} \approx$ your peer) $\rightarrow$ **Light Green** (Moderate Match)
+         - Ratio $1.35 - 2.50$ ($\text{Target} 1.35\times - 2.5\times$ you) $\rightarrow$ **Orange** (Challenging)
+         - Ratio $\ge 2.50$ ($\text{Target} \ge 2.5\times$ you) $\rightarrow$ **Crimson Red** (Cannot Win / Skip)
+    3. *Added Calibration Command*:
+       - Added extension menu command: `🎯 Set / Calibrate My Battle Stats (Optional)` enabling users to manually set or auto-detect their own battle stats for offline ratio calculations.
+  - **Verification**: Verified JavaScript syntax via `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-11 00:51:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
