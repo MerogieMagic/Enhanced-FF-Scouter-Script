@@ -987,6 +987,20 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 00:41:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 63
+- **Focus**: Analysis of Absolute vs. Relative Difficulty Scaling & Multi-Account Caching.
+  - **Root Cause Analysis**:
+    1. *Fixed Absolute BS Thresholds in `get_target_threat_info`*:
+       - When FF Scouter returns an estimated absolute Battle Stats value (`bs_estimate`), the script uses hardcoded absolute thresholds (`< 5M` = Sky Blue, `5M-15M` = Blue, `15M-40M` = Green, `40M-150M` = Orange, `> 150M` = Red). These numbers are fixed constants regardless of which account is logged in.
+    2. *API Key & Client-Side Storage Retention*:
+       - `GM_getValue("limited_key")` and `localStorage` store the API key globally across browser domains. When switching accounts in the same browser, the userscript continues using the original account's API key.
+    3. *1-Hour Response Cache (`memberCountdowns` & GM storage)*:
+       - Target estimates previously queried are cached for 1 hour under the original attacker context.
+  - **Action**: Formulated comprehensive architectural explanation and collaborative options for dynamic user-relative scaling.
+  - **Date & Time**: 2026-10-11 00:42:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
