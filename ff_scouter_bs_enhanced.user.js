@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.85
+// @version      2.86
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -22,7 +22,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.85;
+    const SCRIPT_VERSION = 2.86;
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
 
@@ -82,21 +82,66 @@
         try { localStorage.removeItem("ff_twse_" + name); } catch (e) {}
     }
 
-    // --- API Key Retrieval ---
-    let apiKey = rD_getValue("limited_key", null) || rD_getValue("torn_api_key", null) || localStorage.getItem("twse-config-apikey") || "";
+    // --- Current Account & API Key Management ---
+    function getCurrentUserId() {
+        try {
+            const input = document.getElementById('torn-user');
+            if (input && input.value) {
+                const parsed = JSON.parse(input.value);
+                if (parsed && parsed.id) return String(parsed.id);
+            }
+        } catch (e) {}
+        try {
+            const sidebar = document.querySelector('a[href*="profiles.php?XID="]');
+            const m = sidebar?.href?.match(/XID=(\d+)/);
+            if (m) return m[1];
+        } catch (e) {}
+        return null;
+    }
+
+    function clearEvaluationCache() {
+        try {
+            Object.keys(localStorage).forEach(k => {
+                if (k.startsWith('ff_twse_') || k.startsWith('ffscouter_')) localStorage.removeItem(k);
+            });
+        } catch (e) {}
+    }
+
+    const currentUserId = getCurrentUserId();
+    const keyStorageName = currentUserId ? `limited_key_${currentUserId}` : 'limited_key';
+    let apiKey = rD_getValue(keyStorageName, null) || rD_getValue("limited_key", null) || rD_getValue("torn_api_key", null) || localStorage.getItem("twse-config-apikey") || "";
     if (apiKey === '###PDA-APIKEY###' || apiKey.startsWith('###')) {
         apiKey = "";
     }
 
+    function setApiKey(newKey) {
+        if (newKey !== null) {
+            newKey = newKey.trim();
+            apiKey = newKey;
+            if (currentUserId) rD_setValue(`limited_key_${currentUserId}`, newKey);
+            rD_setValue('limited_key', newKey);
+            rD_setValue('torn_api_key', newKey);
+            try { localStorage.setItem("twse-config-apikey", newKey); } catch(e){}
+            clearEvaluationCache();
+            window.location.reload();
+        }
+    }
+
     if (typeof GM_registerMenuCommand !== "undefined") {
-        GM_registerMenuCommand('🔑 Set Torn / FF Scouter API Key', () => {
-            let userInput = prompt("Enter your Torn API Key (Limited or Full Access):", apiKey);
-            if (userInput !== null) {
-                userInput = userInput.trim();
-                rD_setValue('limited_key', userInput);
-                rD_setValue('torn_api_key', userInput);
-                try { localStorage.setItem("twse-config-apikey", userInput); } catch(e){}
-                apiKey = userInput;
+        GM_registerMenuCommand('🔑 Set / Change Torn & FF Scouter API Key', () => {
+            let userInput = prompt(`Enter Torn API Key for ${currentUserId ? `Account [${currentUserId}]` : 'your account'}:`, apiKey);
+            setApiKey(userInput);
+        });
+
+        GM_registerMenuCommand('🗑️ Clear Cached Stats & Reset Key', () => {
+            if (confirm("Clear stored API key and all cached player stat evaluations?")) {
+                apiKey = "";
+                if (currentUserId) rD_deleteValue(`limited_key_${currentUserId}`);
+                rD_deleteValue('limited_key');
+                rD_deleteValue('torn_api_key');
+                try { localStorage.removeItem("twse-config-apikey"); } catch(e){}
+                clearEvaluationCache();
+                showToast("Cache and API key cleared!");
                 window.location.reload();
             }
         });
@@ -542,13 +587,8 @@
         info_line.style.margin = '5px 0';
         info_line.addEventListener('click', () => {
             if (!apiKey) {
-                const inputKey = prompt("Enter Torn / FF Scouter API Key", rD_getValue('limited_key', ""));
-                if (inputKey) {
-                    apiKey = inputKey.trim();
-                    rD_setValue('limited_key', apiKey);
-                    rD_setValue('torn_api_key', apiKey);
-                    window.location.reload();
-                }
+                const inputKey = prompt(`Enter Torn API Key for ${currentUserId ? `Account [${currentUserId}]` : 'your account'}:`, "");
+                setApiKey(inputKey);
             }
         });
 
@@ -711,7 +751,54 @@
         }
 
         const ff = typeof response.value === 'number' ? response.value : null;
+        const formattedBs = bsNum !== null ? `Est. BS: ~${formatBattleStats(bsNum)}` : (ff !== null ? `FF: ${ff.toFixed(2)}` : 'Unrated');
 
+        // 1. Primary Scaling: Relative Fair Fight (FF) Multiplier (Scales to active account)
+        if (ff !== null) {
+            if (ff < 1.5) {
+                return {
+                    tier: 'very_easy',
+                    color: '#38bdf8',
+                    glow: 'rgba(56, 189, 248, 0.45)',
+                    badgeBg: 'rgba(56, 189, 248, 0.77)',
+                    tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Very Easy Target)`
+                };
+            } else if (ff < 2.2) {
+                return {
+                    tier: 'easy',
+                    color: '#2563eb',
+                    glow: 'rgba(37, 99, 235, 0.45)',
+                    badgeBg: 'rgba(37, 99, 235, 0.77)',
+                    tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Easy Match)`
+                };
+            } else if (ff < 3.2) {
+                return {
+                    tier: 'moderate',
+                    color: '#4ade80',
+                    glow: 'rgba(74, 222, 128, 0.45)',
+                    badgeBg: 'rgba(74, 222, 128, 0.77)',
+                    tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Moderate Match)`
+                };
+            } else if (ff < 4.2) {
+                return {
+                    tier: 'mod_difficult',
+                    color: '#f97316',
+                    glow: 'rgba(249, 115, 22, 0.45)',
+                    badgeBg: 'rgba(249, 115, 22, 0.77)',
+                    tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Moderate Challenge)`
+                };
+            } else {
+                return {
+                    tier: 'cannot_win',
+                    color: '#dc2626',
+                    glow: 'rgba(220, 38, 38, 0.55)',
+                    badgeBg: 'rgba(220, 38, 38, 0.77)',
+                    tooltip: `${formattedBs} (FF: ${ff.toFixed(2)} • Cannot Win - Skip!)`
+                };
+            }
+        }
+
+        // 2. Fallback: Absolute Battle Stats when FF multiplier is unavailable
         if (bsNum !== null) {
             const formatted = formatBattleStats(bsNum);
             if (bsNum < 5e6) {
@@ -727,13 +814,6 @@
             }
         }
 
-        if (ff !== null) {
-            if (ff < 1.5) return { tier: 'very_easy', color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.77)', tooltip: `Threat: Very Easy Target` };
-            if (ff < 2.2) return { tier: 'easy', color: '#2563eb', glow: 'rgba(37, 99, 235, 0.45)', badgeBg: 'rgba(37, 99, 235, 0.77)', tooltip: `Threat: Easy Match` };
-            if (ff < 3.0) return { tier: 'moderate', color: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)', badgeBg: 'rgba(74, 222, 128, 0.77)', tooltip: `Threat: Moderate Match` };
-            if (ff < 3.8) return { tier: 'mod_difficult', color: '#f97316', glow: 'rgba(249, 115, 22, 0.45)', badgeBg: 'rgba(249, 115, 22, 0.77)', tooltip: `Threat: Moderate Challenge` };
-            return { tier: 'cannot_win', color: '#dc2626', glow: 'rgba(220, 38, 38, 0.55)', badgeBg: 'rgba(220, 38, 38, 0.77)', tooltip: `Threat: Cannot Win - Skip!` };
-        }
         return null;
     }
 

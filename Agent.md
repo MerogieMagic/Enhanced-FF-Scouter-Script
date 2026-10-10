@@ -1000,6 +1000,29 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 00:42:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 64
+- **Focus**: Dynamic Fair Fight (FF) Multiplier Scaling & Multi-Account Isolation Integration (`v2.86`).
+  - **Actions Executed**:
+    1. *Relative Threat Scaling via Fair Fight Multiplier*:
+       - Refactored `get_target_threat_info` to make the **Fair Fight (FF)** multiplier the primary driver of threat colors and borders:
+         - **FF $< 1.50$**: Sky Blue (`#38bdf8`) — Very Easy Target
+         - **FF $1.50 - 2.20$**: Royal Blue (`#2563eb`) — Easy Match
+         - **FF $2.20 - 3.20$**: Light Green (`#4ade80`) — Moderate / Fair Fight Match
+         - **FF $3.20 - 4.20$**: Orange (`#f97316`) — Moderate Challenge
+         - **FF $\ge 4.20$**: Crimson Red (`#dc2626`) — Cannot Win / High Threat Target
+       - Retained absolute Battle Stats formatting on badges and tooltips (e.g., `Est. BS: ~25.5m (FF: 2.10 • Easy Match)`).
+    2. *Per-Account API Key Isolation (`getCurrentUserId`)*:
+       - Detects the logged-in Torn User ID from `#torn-user` or navigation anchors.
+       - Stores API keys under `limited_key_<userId>` so different accounts on the same browser seamlessly maintain their own respective API keys.
+    3. *Cache Purging on Key Change (`clearEvaluationCache`)*:
+       - Switching keys or resetting now automatically purges cached player evaluations so stats refresh immediately relative to the new account.
+    4. *Updated Documentation*:
+       - Updated [README.md](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/README.md) with relative FF multiplier table and multi-account setup guide.
+  - **Verification**: Verified JavaScript syntax via `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-11 00:44:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
