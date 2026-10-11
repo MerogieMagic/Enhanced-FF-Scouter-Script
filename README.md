@@ -38,6 +38,10 @@ Violentmonkey / Tampermonkey will automatically detect the script and prompt you
   - In-flight destination badge with live remaining travel countdown.
   - Overseas / abroad country indicators.
 - **📋 1-Click Fast Copy Button**: Instantly copy player Name and ID (`PlayerName [12345]`).
+- **🔄 In-Menu & Automatic Update Checker**:
+  - 1-click manual `🔄 Check for Script Updates` in Tampermonkey / Violentmonkey extension menu.
+  - Automatic 24-hour background check without intrusive prompts if already current.
+  - Prompts and routes directly into the userscript manager's 1-click installer whenever a newer GitHub release is detected.
 
 ---
 

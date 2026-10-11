@@ -1190,3 +1190,32 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 17:31:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 72
+- **Focus**: Extension Menu & Background Update Checker Implementation (`v2.91`).
+  - **Objective**: Provide users with both a manual 1-click update check inside the Tampermonkey / Violentmonkey extension menu and an automatic 24-hour background check to ensure seamless updates without navigating to GitHub manually.
+  - **Architectural Implementation**:
+    1. *Tampermonkey Metadata Update*:
+       - Added `// @connect raw.githubusercontent.com` to prevent cross-origin network permission prompts when fetching remote script metadata.
+       - Bumped `@version` and internal `SCRIPT_VERSION` to `2.91`.
+       - Declared `SCRIPT_RAW_URL` constant pointing to GitHub main branch.
+    2. *Smart Version Comparison Engine (`isNewerVersion`)*:
+       - Compares semantic version components chunk by chunk (`2.91` vs `2.90`, multi-part dots supported).
+       - Accurately identifies when the remote version is strictly newer than the currently active local script.
+    3. *Manual Check Command (`checkForScriptUpdates(true)`)*:
+       - Registered in extension menu: `GM_registerMenuCommand('🔄 Check for Script Updates', ...)`.
+       - Requests remote userscript via `rD_xmlhttpRequest` with timestamp query cache-busting (`?t=${Date.now()}`) and strict `no-cache` headers to bypass GitHub CDN edge caching.
+       - If up to date: Displays an instant on-screen toast (`✅ You are using the latest version (v2.91)!`).
+       - If update available: Pops a confirmation dialog with local vs remote version details. Upon confirmation (`OK`), immediately opens the raw `.user.js` URL in a new tab, triggering Tampermonkey's native 1-click update UI.
+       - If network/parsing error: Notifies user via error toast with error context.
+    4. *Non-Intrusive 24-Hour Automatic Background Checker (`autoCheckForUpdates`)*:
+       - Stores `last_update_check_time` in persistent GM storage.
+       - On page load (delayed by 3 seconds so initial render performance is completely unaffected), checks if 24 hours have elapsed since last check.
+       - If up to date: Completely silent without bothering the user.
+       - If update detected: Prompts the user with update dialog to install.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+    - Verified `README.md` documentation updated with update checker feature description.
+  - **Date & Time**: 2026-10-11 19:48:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+

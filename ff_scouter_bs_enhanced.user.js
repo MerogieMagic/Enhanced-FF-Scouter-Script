@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.90
+// @version      2.91
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -15,6 +15,7 @@
 // @connect      ffscouter.com
 // @connect      api.torn.com
 // @connect      twse.dev
+// @connect      raw.githubusercontent.com
 // @downloadURL https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js
 // @updateURL https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js
 // ==/UserScript==
@@ -22,7 +23,8 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.90;
+    const SCRIPT_VERSION = 2.91;
+    const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
 
@@ -149,7 +151,88 @@
         }
     }
 
+    // --- Version & Update Checker ---
+    function isNewerVersion(remote, local) {
+        const rParts = String(remote).split('.').map(n => parseInt(n, 10) || 0);
+        const lParts = String(local).split('.').map(n => parseInt(n, 10) || 0);
+        const len = Math.max(rParts.length, lParts.length);
+        for (let i = 0; i < len; i++) {
+            const r = rParts[i] || 0;
+            const l = lParts[i] || 0;
+            if (r > l) return true;
+            if (r < l) return false;
+        }
+        return false;
+    }
+
+    function checkForScriptUpdates(manual = false) {
+        if (manual) {
+            showToast("🔍 Checking GitHub for updates...");
+        }
+
+        const cacheBuster = `?t=${Date.now()}`;
+        rD_xmlhttpRequest({
+            method: "GET",
+            url: `${SCRIPT_RAW_URL}${cacheBuster}`,
+            headers: {
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache"
+            },
+            onload: function (response) {
+                try {
+                    if (response.status !== 200 || !response.responseText) {
+                        if (manual) showToast(`❌ Update check failed (HTTP ${response.status})`);
+                        return;
+                    }
+                    const versionMatch = response.responseText.match(/@version\s+([0-9.]+)/i);
+                    if (!versionMatch || !versionMatch[1]) {
+                        if (manual) showToast("❌ Could not parse remote script version.");
+                        return;
+                    }
+                    const remoteVersion = versionMatch[1].trim();
+                    rD_setValue('last_update_check_time', String(Date.now()));
+
+                    if (isNewerVersion(remoteVersion, SCRIPT_VERSION)) {
+                        const confirmed = confirm(
+                            `🚀 A new version of FF Scouter & War Stuff Enhanced is available!\n\n` +
+                            `Current Version: v${SCRIPT_VERSION}\n` +
+                            `Latest Version:  v${remoteVersion}\n\n` +
+                            `Click OK to open Tampermonkey installer and update now.`
+                        );
+                        if (confirmed) {
+                            showToast(`🚀 Opening v${remoteVersion} installer...`);
+                            window.open(SCRIPT_RAW_URL, '_blank');
+                        }
+                    } else {
+                        if (manual) {
+                            showToast(`✅ You are using the latest version (v${SCRIPT_VERSION})!`);
+                        }
+                    }
+                } catch (e) {
+                    console.error("[FF Scouter] Update check parsing error:", e);
+                    if (manual) showToast(`❌ Error checking for updates: ${e.message}`);
+                }
+            },
+            onerror: function (err) {
+                console.error("[FF Scouter] Update check network error:", err);
+                if (manual) showToast("❌ Network error while checking for updates.");
+            }
+        });
+    }
+
+    function autoCheckForUpdates() {
+        const lastCheck = parseInt(rD_getValue('last_update_check_time', '0'), 10) || 0;
+        const now = Date.now();
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        if (now - lastCheck > TWENTY_FOUR_HOURS) {
+            checkForScriptUpdates(false);
+        }
+    }
+
     if (typeof GM_registerMenuCommand !== "undefined") {
+        GM_registerMenuCommand('🔄 Check for Script Updates', () => {
+            checkForScriptUpdates(true);
+        });
         GM_registerMenuCommand('🔑 Set / Change Torn & FF Scouter API Key', () => {
             let userInput = prompt(`Enter Torn API Key for ${currentUserId ? `Account [${currentUserId}]` : 'your account'}:`, apiKey);
             setApiKey(userInput);
@@ -2417,6 +2500,9 @@
             ensureWarSortBars();
         }, 400);
     }
+
+    // Background auto-check for updates (once every 24h, 3s after startup)
+    setTimeout(autoCheckForUpdates, 3000);
 
     console.log(`[FF Scouter + War Stuff Enhanced v${SCRIPT_VERSION}] Loaded Successfully.`);
 })();
