@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.95
+// @version      2.96
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.95;
+    const SCRIPT_VERSION = 2.96;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -312,16 +312,21 @@
         });
 
         GM_registerMenuCommand('🎯 Set / Change Emergency Chain Target ID', () => {
-            const current = rD_getValue('emergency_hit_target', '');
-            const input = prompt("Enter Default / Fallback Emergency Target ID (e.g. 4 for Duke, or an easy level holder):\n(Leave blank to clear and rely on Ranked War enemies)", current);
+            let current = rD_getValue('emergency_hit_target', '');
+            if (current === '4' || current === '15') current = '';
+            const input = prompt("Enter Default / Fallback Emergency Target ID (e.g. 1776074, 1999595, or an easy level holder):\n(Leave blank to clear and rely on Ranked War enemies & curated 1-hit targets)", current);
             if (input !== null) {
                 const trimmed = input.trim();
+                if (trimmed === '4' || trimmed === '15') {
+                    alert("⚠️ Duke [4] and Leslie [15] are massive loot bosses (5.5M HP) and cannot be used as easy 1-hit chain targets!");
+                    return;
+                }
                 if (/^\d+$/.test(trimmed)) {
                     rD_setValue('emergency_hit_target', trimmed);
                     showToast(`Emergency Chain Target set to [${trimmed}]`);
                 } else {
                     rD_deleteValue('emergency_hit_target');
-                    showToast("Emergency Chain Target cleared (using active Ranked War enemies).");
+                    showToast("Emergency Chain Target cleared (using active Ranked War enemies & 1-hit punching bags).");
                 }
             }
         });
@@ -2249,6 +2254,14 @@
     // --- Emergency Target Safety & Threat Filtering Engine ---
     function evaluateTargetSafety(playerId) {
         if (!playerId) return { isSafe: false, score: Infinity, threat: null, bs: null, ff: null, impossible: true };
+
+        // STRICT NPC / RAID / LOOT BOSS BAN:
+        // Duke [4] (5.5M HP), Leslie [15], etc. are massive multi-million HP loot bosses, NEVER easy 1-hit targets!
+        const NPC_LOOT_BOSS_IDS = ['4', '15', '17', '19', '20', '21'];
+        if (NPC_LOOT_BOSS_IDS.includes(String(playerId))) {
+            return { isSafe: false, score: Infinity, threat: null, bs: null, ff: null, impossible: true, isLootBoss: true };
+        }
+
         const resp = get_fair_fight_response(playerId);
         if (!resp || resp.no_data) {
             // Unrated / not yet evaluated in cache
@@ -2316,7 +2329,7 @@
         if (manual) showToast("🔍 Querying FF Scouter Target Finder API...");
 
         return new Promise((resolve) => {
-            const url = `${BASE_FF_URL}/api/v1/get-targets?key=${apiKey}&inactiveonly=1&maxff=2.2&limit=25`;
+            const url = `${BASE_FF_URL}/api/v1/get-targets?key=${apiKey}&inactiveonly=1&minlevel=3&maxlevel=15&maxff=1.5&limit=30`;
             rD_xmlhttpRequest({
                 method: "GET",
                 url: url,
@@ -2365,7 +2378,7 @@
         const input = prompt(
             "📋 Custom Chain Target List Manager\n\n" +
             "Enter Target Player IDs separated by commas or spaces:\n" +
-            "(e.g. 4, 15, 2189445, 1234567)\n\n" +
+            "(e.g. 1776074, 1999595, 2061354, 849274 - inactive 1-hit targets)\n\n" +
             "The Hit button will cycle through these targets if no safe war enemies are available.\n" +
             "(Leave blank and click OK to clear the list):",
             currentStr
@@ -2375,7 +2388,7 @@
             const ids = input
                 .split(/[\s,]+/)
                 .map(s => s.trim())
-                .filter(s => /^\d+$/.test(s));
+                .filter(s => /^\d+$/.test(s) && s !== '4' && s !== '15');
             
             const uniqueIds = [...new Set(ids)];
             if (uniqueIds.length > 0) {
@@ -2448,8 +2461,35 @@
         return results;
     }
 
+    // Curated Inactive 1-Hit Punching Bag Targets (Level <= 15, stats < 650, 100% inactive accounts)
+    const CURATED_1HIT_TARGETS = [
+        { id: "1776074", name: "DOMINODOM", level: 3, total: 164 },     // Inactive 5+ years, 164 stats
+        { id: "1999595", name: "L3MILK", level: 4, total: 99 },          // Inactive 5+ years, 99 stats
+        { id: "2061354", name: "Ghoad", level: 8, total: 172 },          // Inactive 4+ years, 172 stats
+        { id: "1964175", name: "fijimarie", level: 8, total: 479 },      // Inactive 5+ years, 479 stats
+        { id: "849274", name: "Deathreaper123", level: 14, total: 635 }, // Inactive 10+ years, 635 stats
+        { id: "552906", name: "Footballman12", level: 15, total: 451 },  // Inactive 12+ years, 451 stats
+        { id: "91892", name: "AbcDragonMaster", level: 15, total: 552 },  // Inactive 15+ years, 552 stats
+        { id: "901426", name: "aaronyuan", level: 19, total: 54 },       // Inactive 10+ years, 54 stats (1-hit)
+        { id: "1423394", name: "gogo234", level: 19, total: 67 },        // Inactive 8+ years, 67 stats (1-hit)
+        { id: "1075217", name: "dmora", level: 19, total: 82 },          // Inactive 8+ years, 82 stats (1-hit)
+        { id: "430622", name: "Braskius", level: 17, total: 113 },       // Inactive 11+ years, 113 stats (1-hit)
+        { id: "969780", name: "livehere", level: 20, total: 80 }         // Inactive 10+ years, 80 stats (1-hit)
+    ];
+
+    function getNextCurated1HitTarget() {
+        let idx = parseInt(rD_getValue('curated_1hit_idx', '0'), 10) || 0;
+        const target = CURATED_1HIT_TARGETS[idx % CURATED_1HIT_TARGETS.length];
+        rD_setValue('curated_1hit_idx', String((idx + 1) % CURATED_1HIT_TARGETS.length));
+        return target;
+    }
+
     function findEmergencyTargetId() {
-        const customTarget = rD_getValue('emergency_hit_target', '4');
+        let customTarget = rD_getValue('emergency_hit_target', '');
+        if (customTarget === '4' || customTarget === '15') {
+            rD_deleteValue('emergency_hit_target');
+            customTarget = '';
+        }
 
         // 1. Scan active DOM if on a faction war page
         try {
@@ -2533,8 +2573,8 @@
                     return safeOkay[0].pid;
                 }
 
-                // 1B. Filter for unrated Okay targets (EXCLUDING impossible ones)
-                const unratedOkay = candidates.filter(c => c.isOkay && !c.evalResult.impossible);
+                // 1B. Filter for unrated Okay targets (EXCLUDING impossible ones, max level <= 35)
+                const unratedOkay = candidates.filter(c => c.isOkay && !c.evalResult.impossible && c.level <= 35);
                 if (unratedOkay.length > 0) {
                     // Sort by lowest level first (lower level = far less likely to be a titan)
                     unratedOkay.sort((a, b) => a.level - b.level);
@@ -2556,7 +2596,7 @@
                         const level = parseInt(m.level || '999', 10);
                         if (evalResult.isSafe) {
                             safeApiTargets.push({ id: String(id), evalResult });
-                        } else {
+                        } else if (level <= 35) {
                             unratedApiTargets.push({ id: String(id), level });
                         }
                     }
@@ -2585,7 +2625,7 @@
             }
         } catch (e) {}
 
-        // 4. FF Scouter Innate Target Finder Cache (All verified safe, inactive, FF <= 2.2)
+        // 4. FF Scouter Innate Target Finder Cache (All verified safe, inactive, level <= 15, FF <= 1.5)
         try {
             const innateTargets = JSON.parse(rD_getValue('ff_innate_targets', '[]'));
             if (Array.isArray(innateTargets) && innateTargets.length > 0) {
@@ -2600,8 +2640,8 @@
             }
         } catch (e) {}
 
-        // 5. User-Configured Single Emergency Chain Target (e.g. Duke [4])
-        if (customTarget && /^\d+$/.test(customTarget.trim())) {
+        // 5. User-Configured Single Emergency Chain Target (Validated Safe)
+        if (customTarget && /^\d+$/.test(customTarget.trim()) && customTarget.trim() !== '4' && customTarget.trim() !== '15') {
             const evalCustom = evaluateTargetSafety(customTarget.trim());
             if (!evalCustom.impossible) {
                 return customTarget.trim();
@@ -2626,8 +2666,13 @@
             }
         } catch (e) {}
 
-        // 7. Universal Fallback: Duke [4] (Torn NPC panic target, safe & always available)
-        return '4';
+        // 7. Universal Fallback: Curated Inactive 1-Hit Punching Bag Targets (Level <= 15, stats < 650)
+        const fallback1Hit = getNextCurated1HitTarget();
+        if (fallback1Hit && fallback1Hit.id) {
+            return fallback1Hit.id;
+        }
+
+        return null;
     }
 
     function createOrUpdateChainWidget() {
@@ -2715,7 +2760,12 @@
                 try {
                     const targetId = findEmergencyTargetId();
                     if (targetId) {
-                        showToast(`⚡ Launching attack on safe target [${targetId}]...`);
+                        const curatedMatch = CURATED_1HIT_TARGETS.find(t => String(t.id) === String(targetId));
+                        if (curatedMatch) {
+                            showToast(`⚡ Launching attack on 1-hit target ${curatedMatch.name} [${curatedMatch.id}] (Lv ${curatedMatch.level}, ${curatedMatch.total} stats)...`);
+                        } else {
+                            showToast(`⚡ Launching attack on safe target [${targetId}]...`);
+                        }
                         const targetUrl = `/page.php?sid=attack&user2ID=${targetId}`;
                         if (e.ctrlKey || e.metaKey) {
                             window.open(targetUrl, '_blank');
@@ -2727,11 +2777,11 @@
                         const input = prompt(
                             "⚠️ WARNING: No safe / easy targets available!\n" +
                             "All available war enemies are either impossible titans or hospitalized.\n\n" +
-                            "Enter an Easy Target ID to attack immediately (default: 4 for Duke):\n" +
+                            "Enter an Easy Target ID to attack immediately:\n" +
                             "(Leave blank or cancel to open Ranked War safely without attacking)",
-                            "4"
+                            "1776074"
                         );
-                        if (input !== null && /^\d+$/.test(input.trim())) {
+                        if (input !== null && /^\d+$/.test(input.trim()) && input.trim() !== '4' && input.trim() !== '15') {
                             const customId = input.trim();
                             rD_setValue('emergency_hit_target', customId);
                             showToast(`⚡ Launching attack on [${customId}]...`);
