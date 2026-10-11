@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.88
+// @version      2.89
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -22,7 +22,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.88;
+    const SCRIPT_VERSION = 2.89;
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
 
@@ -1641,8 +1641,16 @@
 
     // --- Member List Dedicated Est. BS Column ---
     function updateFactionMemberTableBS() {
-        // 1. Purge stray non-row estimate lines
+        // STRICT SCOPE: Only execute on Faction Profile rosters (step=profile).
+        // NEVER execute on Ranked War or War Views, which have their own native Score columns.
+        if (!window.location.href.includes("step=profile")) return;
+
+        // 1. Purge stray non-row estimate lines (Ironclad protection for all player rows)
         $(".table-body > li:not(.table-row), .table-body > div:not(.table-row), .table-body [class*='estimate']:not(.ff-scouter-bs-badge):not(.ff-bs-col), .members-list [class*='estimate']:not(.ff-scouter-bs-badge):not(.ff-bs-col)").each(function() {
+            // NEVER remove any element that is or contains a player profile link or member cell!
+            if ($(this).find('a[href*="profiles.php?XID="]').length > 0 || $(this).is('a[href*="profiles.php?XID="]') || $(this).hasClass('member') || $(this).hasClass('table-row') || $(this).hasClass('enemy-faction-member') || $(this).hasClass('your-faction-member')) {
+                return;
+            }
             const txt = $(this).text().toLowerCase();
             if (txt.includes('stats estimate') || txt.includes('estimate:')) $(this).remove();
         });
@@ -1750,7 +1758,7 @@
             });
 
             $(row).children().each(function() {
-                if ($(this).hasClass('ff-bs-col') || $(this).hasClass('member') || $(this).hasClass('lvl') || $(this).hasClass('icons')) return;
+                if ($(this).hasClass('ff-bs-col') || $(this).hasClass('member') || $(this).hasClass('lvl') || $(this).hasClass('icons') || $(this).hasClass('score') || $(this).hasClass('attack')) return;
                 const txt = $(this).text().trim();
                 if (/^\d{1,4}\.\d{1,2}$/.test(txt)) $(this).remove();
             });
@@ -1824,7 +1832,7 @@
                 }
             }
         }
-        if (window.location.href.includes("factions.php")) {
+        if (window.location.href.includes("factions.php") && window.location.href.includes("step=profile")) {
             updateFactionMemberTableBS();
         }
         refreshActiveSorts();
@@ -1955,7 +1963,9 @@
         }
 
         if (window.location.href.includes("factions.php")) {
-            updateFactionMemberTableBS();
+            if (window.location.href.includes("step=profile")) {
+                updateFactionMemberTableBS();
+            }
             ensureWarSortBars();
         }
     });
@@ -1970,7 +1980,9 @@
         setInterval(refreshFactionStatusData, API_INTERVAL);
         setTimeout(refreshFactionStatusData, 1000); // Initial run after load
         setInterval(() => {
-            updateFactionMemberTableBS();
+            if (window.location.href.includes("step=profile")) {
+                updateFactionMemberTableBS();
+            }
             ensureWarSortBars();
         }, 400);
     }
