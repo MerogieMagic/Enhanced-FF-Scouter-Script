@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.93
+// @version      2.94
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.93;
+    const SCRIPT_VERSION = 2.94;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -324,6 +324,14 @@
                     showToast("Emergency Chain Target cleared (using active Ranked War enemies).");
                 }
             }
+        });
+
+        GM_registerMenuCommand('📋 Manage Custom Chain Target List', () => {
+            manageCustomTargetList();
+        });
+
+        GM_registerMenuCommand('📥 Fetch / Refresh FF Scouter Innate Target List', () => {
+            fetchFFScouterTargets(true);
         });
     }
 
@@ -2287,6 +2295,99 @@
         return { isSafe: true, score: numericScore, threat, bs, ff };
     }
 
+    // --- FF Scouter Innate Target Finder & Custom Target List ---
+    function fetchFFScouterTargets(manual = false) {
+        if (!apiKey) {
+            if (manual) showToast("⚠️ API Key required to fetch FF Scouter targets.");
+            return Promise.resolve([]);
+        }
+
+        const now = Date.now();
+        const lastFetch = parseInt(rD_getValue('ff_targets_last_fetch', '0'), 10) || 0;
+        const TWO_HOURS = 2 * 60 * 60 * 1000;
+
+        if (!manual && now - lastFetch < TWO_HOURS) {
+            try {
+                const cached = JSON.parse(rD_getValue('ff_innate_targets', '[]'));
+                if (Array.isArray(cached) && cached.length > 0) return Promise.resolve(cached);
+            } catch (e) {}
+        }
+
+        if (manual) showToast("🔍 Querying FF Scouter Target Finder API...");
+
+        return new Promise((resolve) => {
+            const url = `${BASE_FF_URL}/api/v1/get-targets?key=${apiKey}&inactiveonly=1&maxff=2.2&limit=25`;
+            rD_xmlhttpRequest({
+                method: "GET",
+                url: url,
+                onload: function (response) {
+                    try {
+                        if (response.status === 200) {
+                            const data = JSON.parse(response.responseText);
+                            if (Array.isArray(data) && data.length > 0) {
+                                const targetList = data.map(item => ({
+                                    id: String(item.player_id || item.id),
+                                    name: item.name || '',
+                                    ff: item.fair_fight || item.value || null,
+                                    bs: item.bs_estimate || item.bs_estimate_human || null,
+                                    level: item.level || null
+                                })).filter(t => t.id && /^\d+$/.test(t.id));
+
+                                rD_setValue('ff_innate_targets', JSON.stringify(targetList));
+                                rD_setValue('ff_targets_last_fetch', String(Date.now()));
+                                if (manual) showToast(`✅ Loaded ${targetList.length} safe targets from FF Scouter!`);
+                                resolve(targetList);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.error("[FF Scouter] Error parsing get-targets response:", e);
+                    }
+                    if (manual) showToast("❌ Failed to fetch targets from FF Scouter.");
+                    resolve([]);
+                },
+                onerror: function (err) {
+                    console.error("[FF Scouter] Network error fetching get-targets:", err);
+                    if (manual) showToast("❌ Network error fetching FF Scouter targets.");
+                    resolve([]);
+                }
+            });
+        });
+    }
+
+    function manageCustomTargetList() {
+        let currentList = [];
+        try {
+            currentList = JSON.parse(rD_getValue('custom_target_list', '[]'));
+        } catch (e) {}
+        const currentStr = Array.isArray(currentList) ? currentList.join(', ') : '';
+
+        const input = prompt(
+            "📋 Custom Chain Target List Manager\n\n" +
+            "Enter Target Player IDs separated by commas or spaces:\n" +
+            "(e.g. 4, 15, 2189445, 1234567)\n\n" +
+            "The Hit button will cycle through these targets if no safe war enemies are available.\n" +
+            "(Leave blank and click OK to clear the list):",
+            currentStr
+        );
+
+        if (input !== null) {
+            const ids = input
+                .split(/[\s,]+/)
+                .map(s => s.trim())
+                .filter(s => /^\d+$/.test(s));
+            
+            const uniqueIds = [...new Set(ids)];
+            if (uniqueIds.length > 0) {
+                rD_setValue('custom_target_list', JSON.stringify(uniqueIds));
+                showToast(`✅ Saved ${uniqueIds.length} custom chain targets!`);
+            } else {
+                rD_deleteValue('custom_target_list');
+                showToast("Cleared custom chain target list.");
+            }
+        }
+    }
+
     function findEmergencyTargetId() {
         const customTarget = rD_getValue('emergency_hit_target', '');
 
@@ -2358,12 +2459,40 @@
             }
         } catch (e) {}
 
-        // 3. User-configured emergency chain target ID
+        // 3. User-Compiled Custom Target List (Personal Target Roster)
+        try {
+            const customList = JSON.parse(rD_getValue('custom_target_list', '[]'));
+            if (Array.isArray(customList) && customList.length > 0) {
+                for (const cid of customList) {
+                    const evalResult = evaluateTargetSafety(cid);
+                    if (!evalResult.impossible) {
+                        return String(cid);
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // 4. FF Scouter Innate Target Finder Cache (All verified safe, inactive, FF <= 2.2)
+        try {
+            const innateTargets = JSON.parse(rD_getValue('ff_innate_targets', '[]'));
+            if (Array.isArray(innateTargets) && innateTargets.length > 0) {
+                const safeInnate = innateTargets.filter(t => {
+                    const evalResult = evaluateTargetSafety(t.id);
+                    return !evalResult.impossible;
+                });
+                if (safeInnate.length > 0) {
+                    safeInnate.sort((a, b) => (parseFloat(a.ff) || 2.0) - (parseFloat(b.ff) || 2.0));
+                    return String(safeInnate[0].id);
+                }
+            }
+        } catch (e) {}
+
+        // 5. User-Configured Single Emergency Chain Target (e.g. Duke [4])
         if (customTarget && /^\d+$/.test(customTarget.trim())) {
             return customTarget.trim();
         }
 
-        // 4. Cached war enemies from previous visits (ONLY SAFE TARGETS!)
+        // 6. Cached War Enemies from previous visits (ONLY SAFE TARGETS!)
         try {
             const cached = JSON.parse(rD_getValue('cached_war_enemies', '[]'));
             if (Array.isArray(cached) && cached.length > 0) {
@@ -2691,6 +2820,9 @@
 
     // Background auto-check for updates (once every 24h, 3s after startup)
     setTimeout(autoCheckForUpdates, 3000);
+
+    // Background pre-fetch of safe innate targets from FF Scouter Target Finder (4.5s after load)
+    setTimeout(() => { fetchFFScouterTargets(false); }, 4500);
 
     console.log(`[FF Scouter + War Stuff Enhanced v${SCRIPT_VERSION}] Loaded Successfully.`);
 })();

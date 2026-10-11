@@ -1286,6 +1286,37 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 21:44:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 75
+- **Focus**: FF Scouter Innate Target Finder Integration (`/api/v1/get-targets`) & Custom Chain Target List Manager (`v2.94`).
+  - **User Request**:
+    - User asked: *"possible to compile a list of targets or use FF Scouter's innate defult functionlity. I reclled thy had this option"*.
+  - **Investigation & API Discovery**:
+    - Researched FF Scouter's native API documentation and community implementations (such as *Torn FFScouter Panic Target* and *YATA Target Importer*).
+    - Identified official endpoint: `GET https://ffscouter.com/api/v1/get-targets?key=${apiKey}&inactiveonly=1&maxff=2.2&limit=25`.
+    - Confirmed FF Scouter calculates Fair Fight dynamically relative to the authenticated account's API key, returning a list of inactive players (14+ days offline, safe, guaranteed win) with FF $\le$ 2.2.
+  - **Architectural Implementation (`v2.94`)**:
+    1. *FF Scouter Innate Target Finder Engine (`fetchFFScouterTargets`)*:
+       - Queries `https://ffscouter.com/api/v1/get-targets?key=${apiKey}&inactiveonly=1&maxff=2.2&limit=25`.
+       - Caches up to 25 verified safe inactive targets into persistent storage (`ff_innate_targets`) with a 2-hour TTL.
+       - Runs automatically in the background 4.5 seconds after page load.
+       - Added extension menu command: `📥 Fetch / Refresh FF Scouter Innate Target List`.
+    2. *Personal Target Roster Manager (`manageCustomTargetList`)*:
+       - Added extension menu command: `📋 Manage Custom Chain Target List`.
+       - Allows users to enter/paste any list of player IDs (e.g. `4, 15, 2189445, 1234567`) separated by commas, spaces, or newlines.
+       - Sanitizes and stores unique IDs in `custom_target_list`.
+    3. *Unified Multi-Tier Target Resolution Engine (`findEmergencyTargetId`)*:
+       - **Tier 1 (Ranked War Safe Enemies)**: Prioritizes active war enemies if available (`Okay`) and winnable (`FF < 3.0`, BS $\le$ 1.35x player).
+       - **Tier 2 (User-Compiled Custom Target List)**: Cycles through the user's personal targets roster, selecting the first winnable player.
+       - **Tier 3 (FF Scouter Innate Target Finder Cache)**: Uses FF Scouter's live inactive targets (FF $\le$ 2.2), sorted by easiest FF.
+       - **Tier 4 (Fallback Emergency Target ID)**: Falls back to single designated emergency ID (e.g. Duke [4]).
+       - **Tier 5 (Zero-Suicide Safety Wall)**: Prompts user or opens Ranked War without forcing an attack.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+    - Updated documentation in `README.md`.
+  - **Date & Time**: 2026-10-11 22:10:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
