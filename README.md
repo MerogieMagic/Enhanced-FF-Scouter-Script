@@ -27,14 +27,9 @@ Violentmonkey / Tampermonkey will automatically detect the script and prompt you
   - Live ticking countdown badges directly in faction member rosters.
   - Clickable hospital badges to instantly preload and stage attacks.
   - Live countdown banner and on-model overlay timer directly on attack screens (`page.php?sid=attack`).
-- **🔗 Universal Faction Chain Watcher Widget**:
-  - Floating, draggable chain status widget persisting across all Torn pages.
-  - Live hit counters (`current / milestone`), countdown timer (`mm:ss`), and respect modifier (`1.50x`).
-  - Dynamic urgency color indicators: 🟢 Safe (> 120s), 🟡 Caution (60s–120s), 🔴 Danger (< 60s), ⚡ Panic (< 30s with edge flash).
-  - Built-in zero-latency Web Audio chime alerts at 90s, 60s, and 30s (with 1-click mute toggle).
-  - Instant `[⚡ Hit Target]` emergency shortcut: Automatically detects and opens the easiest available enemy (`Okay`) in Ranked War (lowest Battle Stats first). If warring is inactive or enemies are too strong, seamlessly pulls guaranteed safe inactive targets from FF Scouter's innate Target Finder API (`/api/v1/get-targets`, FF $\le$ 2.2) or your personal compiled custom target list. Ctrl/Cmd+Click opens in new tab.
-  - **📋 Custom Target List Manager & 📥 FF Scouter Target Finder**: In-menu tools to compile custom panic target rosters or refresh FF Scouter's live inactive targets.
-  - Dual-engine data sync: Reads native sidebar in real-time with zero API calls, with automatic API polling fallback.
+- **📋 Custom Target List Manager & 📥 FF Scouter Target Finder**:
+  - In-menu tools in Tampermonkey / Violentmonkey to configure emergency 1-hit punching bags or refresh FF Scouter's live inactive targets (`/api/v1/get-targets`).
+  - Pre-seeded with curated inactive punching bags under Level 15 (e.g. DOMINODOM, L3MILK, Ghoad, fijimarie) with strict NPC/boss bans (Duke & Leslie excluded).
 - **✈️ Travel & Overseas Status Badges**:
   - In-flight destination badge with live remaining travel countdown.
   - Overseas / abroad country indicators.

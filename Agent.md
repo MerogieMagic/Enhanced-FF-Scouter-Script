@@ -1407,7 +1407,35 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 23:08:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
-
-
-
-
+#### Session 78
+- **Focus**: Disabling and Clean Removal of Chain Watcher Widget (`v2.97`).
+  - **User Directive**:
+    - User instruction: *"disable and remove the chain watcher for now"*.
+  - **Changes Executed**:
+    1. *Userscript Menu Commands Purged*:
+       - Removed `🔗 Toggle Chain Watcher Widget`.
+       - Removed `🔔 Toggle Chain Sound Alerts`.
+       - Removed `📍 Reset Chain Watcher Position`.
+    2. *Chain Watcher CSS Purged*:
+       - Removed all `.ff-chain-widget`, `.safe`, `.warning`, `.danger`, `.panic` classes, `@keyframes ff-chain-pulse`, `@keyframes ff-chain-panic`, and screen flash animations from `GM_addStyle`.
+    3. *Chain Watcher Functions & State Purged*:
+       - Removed `chainState` object.
+       - Removed `playChainAlertSound()` Web Audio synthesizer.
+       - Removed `readNativeSidebarChain()` DOM parser.
+       - Removed `fetchFactionChainData()` API polling handler.
+       - Removed `createOrUpdateChainWidget()` floating DOM element builder and event listeners.
+       - Removed `tickChainWatcher()` 1-second interval handler.
+    4. *Background Timers Cleaned*:
+       - Removed `setInterval(tickChainWatcher, 1000)`.
+       - Removed `setInterval(fetchFactionChainData, 20000)` and startup `setTimeout(fetchFactionChainData, 1200)`.
+       - All background execution overhead and faction API polling associated with chain watching are completely eliminated.
+    5. *Preservation of Core War & Target Scouting Tools*:
+       - Retained `evaluateTargetSafety()`, `CURATED_1HIT_TARGETS` (DOMINODOM, L3MILK, etc.), `fetchFFScouterTargets()` API cache, and `manageCustomTargetList()` for user target roster management.
+       - Hospital countdown badges, threat borders, and smart war sorting remain intact and fully functional.
+    6. *Documentation*:
+       - Updated `README.md` to remove Chain Watcher feature mentions and highlight the target management tools.
+       - Bumped userscript version to `v2.97`.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+  - **Date & Time**: 2026-10-11 23:41:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
