@@ -1143,3 +1143,12 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 17:18:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 70
+- **Focus**: User Verification & Production Resolution Confirmation (`v2.89`).
+  - **Outcome**:
+    - User updated to `v2.89` in browser and confirmed: *"ok its correct now"*.
+    - All 40 enemy faction members are now fully rendered, sorted, and preserved across Ranked War views with 0 missing or truncated rows.
+    - Zero interference between TornTools and FF Scouter.
+  - **Date & Time**: 2026-10-11 17:21:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
