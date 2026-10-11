@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.91
+// @version      2.92
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.91;
+    const SCRIPT_VERSION = 2.92;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -309,6 +309,21 @@
             rD_deleteValue('chain_widget_pos');
             showToast('Chain Watcher position reset to default top-right.');
             window.location.reload();
+        });
+
+        GM_registerMenuCommand('🎯 Set / Change Emergency Chain Target ID', () => {
+            const current = rD_getValue('emergency_hit_target', '');
+            const input = prompt("Enter Default / Fallback Emergency Target ID (e.g. 4 for Duke, or an easy level holder):\n(Leave blank to clear and rely on Ranked War enemies)", current);
+            if (input !== null) {
+                const trimmed = input.trim();
+                if (/^\d+$/.test(trimmed)) {
+                    rD_setValue('emergency_hit_target', trimmed);
+                    showToast(`Emergency Chain Target set to [${trimmed}]`);
+                } else {
+                    rD_deleteValue('emergency_hit_target');
+                    showToast("Emergency Chain Target cleared (using active Ranked War enemies).");
+                }
+            }
         });
     }
 
@@ -1598,6 +1613,10 @@
                 const data = await fetchFactionMembers(enemyId);
                 if (data && Array.isArray(data.members)) {
                     data.members.forEach(m => { memberStatusMap[m.id] = m; });
+                    const enemyIds = data.members.map(m => String(m.id));
+                    if (enemyIds.length > 0) {
+                        rD_setValue('cached_war_enemies', JSON.stringify(enemyIds));
+                    }
                     const enemyContainer = document.querySelector(".enemy-faction .members-list, .faction-info-wrap .members-list");
                     if (enemyContainer) {
                         enemyContainer.querySelectorAll("li").forEach(li => {
@@ -1853,6 +1872,16 @@
             const container = listElement.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .factions-wrap > div') || listElement.parentElement;
             if (container && listElement) {
                 setupWarSortBar(container, listElement);
+                if (container.matches && container.matches('.enemy-faction, [class*="enemyFaction"], [class*="opponentFaction"]')) {
+                    const enemyIds = [];
+                    listElement.querySelectorAll(':scope > li').forEach(li => {
+                        const pid = get_player_id_in_element(li);
+                        if (pid) enemyIds.push(pid);
+                    });
+                    if (enemyIds.length > 0) {
+                        rD_setValue('cached_war_enemies', JSON.stringify(enemyIds));
+                    }
+                }
             }
         });
     }
@@ -2210,16 +2239,100 @@
     }
 
     function findEmergencyTargetId() {
-        const okayMember = document.querySelector('.enemy-faction .members-list li:has(.status:contains("Okay")), .enemy-faction .members-list li');
-        if (okayMember) {
-            const pid = get_player_id_in_element(okayMember);
-            if (pid) return pid;
-        }
-        for (const [id, m] of Object.entries(memberStatusMap)) {
-            if (m && m.status && m.status.state === 'Okay') {
-                return id;
+        // 1. Scan active DOM if on a faction war page
+        try {
+            const enemyLis = Array.from(document.querySelectorAll(
+                '.enemy-faction .members-list li, [class*="enemyFaction"] .members-list li, [class*="opponentFaction"] .members-list li, .faction-war-view .enemy-faction li'
+            ));
+            if (enemyLis.length > 0) {
+                const candidates = [];
+                for (const li of enemyLis) {
+                    const pid = get_player_id_in_element(li);
+                    if (!pid) continue;
+                    const statusEl = li.querySelector('.status, .table-cell.status');
+                    const statusTxt = (statusEl ? statusEl.textContent : '').toLowerCase();
+                    const isOkay = statusTxt.includes('okay') || 
+                                   (!statusTxt.includes('hospital') && !statusTxt.includes('travel') && !statusTxt.includes('abroad') && !statusTxt.includes('jail'));
+                    
+                    let bs = null;
+                    const resp = get_fair_fight_response(pid);
+                    if (resp && typeof resp.bs_estimate === 'number') bs = resp.bs_estimate;
+                    candidates.push({ pid, isOkay, bs });
+                }
+
+                // Cache all enemy IDs for other pages
+                const allEnemyIds = candidates.map(c => c.pid);
+                if (allEnemyIds.length > 0) {
+                    rD_setValue('cached_war_enemies', JSON.stringify(allEnemyIds));
+                }
+
+                // Available (Okay) targets first
+                const okayTargets = candidates.filter(c => c.isOkay);
+                if (okayTargets.length > 0) {
+                    // Sort lowest Battle Stats first
+                    okayTargets.sort((a, b) => {
+                        if (a.bs !== null && b.bs !== null) return a.bs - b.bs;
+                        if (a.bs !== null) return -1;
+                        if (b.bs !== null) return 1;
+                        return 0;
+                    });
+                    return okayTargets[0].pid;
+                }
+
+                // If all in hosp, pick the first candidate
+                if (candidates.length > 0) {
+                    return candidates[0].pid;
+                }
             }
+        } catch (e) {
+            console.error("[FF Scouter] Error scanning DOM for emergency targets:", e);
         }
+
+        // 2. Scan in-memory memberStatusMap from API
+        try {
+            const okayApiTargets = [];
+            for (const [id, m] of Object.entries(memberStatusMap)) {
+                if (m && m.status && m.status.state === 'Okay') {
+                    let bs = null;
+                    const resp = get_fair_fight_response(id);
+                    if (resp && typeof resp.bs_estimate === 'number') bs = resp.bs_estimate;
+                    okayApiTargets.push({ id, bs });
+                }
+            }
+            if (okayApiTargets.length > 0) {
+                okayApiTargets.sort((a, b) => {
+                    if (a.bs !== null && b.bs !== null) return a.bs - b.bs;
+                    if (a.bs !== null) return -1;
+                    if (b.bs !== null) return 1;
+                    return 0;
+                });
+                return okayApiTargets[0].id;
+            }
+        } catch (e) {}
+
+        // 3. User-configured emergency chain target ID (e.g. Duke or designated target)
+        const customTarget = rD_getValue('emergency_hit_target', '');
+        if (customTarget && /^\d+$/.test(customTarget.trim())) {
+            return customTarget.trim();
+        }
+
+        // 4. Cached war enemies from previous visits (lowest BS first)
+        try {
+            const cached = JSON.parse(rD_getValue('cached_war_enemies', '[]'));
+            if (Array.isArray(cached) && cached.length > 0) {
+                let bestId = cached[0];
+                let minBs = Infinity;
+                for (const id of cached) {
+                    const resp = get_fair_fight_response(id);
+                    if (resp && typeof resp.bs_estimate === 'number' && resp.bs_estimate < minBs) {
+                        minBs = resp.bs_estimate;
+                        bestId = id;
+                    }
+                }
+                return String(bestId);
+            }
+        } catch (e) {}
+
         return null;
     }
 
@@ -2305,11 +2418,39 @@
             hitBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                const targetId = findEmergencyTargetId();
-                if (targetId) {
-                    window.location.href = `/page.php?sid=attack&user2ID=${targetId}`;
-                } else {
-                    window.location.href = `/factions.php?step=your#/war/rank`;
+                try {
+                    const targetId = findEmergencyTargetId();
+                    if (targetId) {
+                        showToast(`⚡ Launching attack on [${targetId}]...`);
+                        const targetUrl = `/page.php?sid=attack&user2ID=${targetId}`;
+                        if (e.ctrlKey || e.metaKey) {
+                            window.open(targetUrl, '_blank');
+                        } else {
+                            window.location.href = targetUrl;
+                        }
+                    } else {
+                        // Prompt user to enter a target ID or jump to Ranked War
+                        const input = prompt(
+                            "⚡ Emergency Chain Hit:\n" +
+                            "No active war enemy target found in cache.\n\n" +
+                            "Enter a Player ID to attack immediately\n" +
+                            "(or click OK with blank input to open Ranked War):",
+                            ""
+                        );
+                        if (input !== null) {
+                            const trimmed = input.trim();
+                            if (/^\d+$/.test(trimmed)) {
+                                rD_setValue('emergency_hit_target', trimmed);
+                                showToast(`⚡ Launching attack on [${trimmed}]...`);
+                                window.location.href = `/page.php?sid=attack&user2ID=${trimmed}`;
+                            } else {
+                                window.location.href = `/factions.php?step=your#/war/rank`;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error("[FF Scouter] Error in hit button click:", err);
+                    showToast(`❌ Error: ${err.message}`);
                 }
             });
 

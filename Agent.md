@@ -1218,4 +1218,41 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 19:48:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 73
+- **Focus**: Emergency Hit Target Button Fix, CSS Selector Crash Elimination & Multi-Tier Resolution Engine (`v2.92`).
+  - **Problem Reported**:
+    - User reported: *"hit button not working"*.
+  - **Root Cause Analysis**:
+    - Inside `findEmergencyTargetId()`, the query was written as:
+      `document.querySelector('.enemy-faction .members-list li:has(.status:contains("Okay")), .enemy-faction .members-list li')`.
+    - `:contains("Okay")` is a legacy jQuery pseudo-selector and is **invalid syntax in standard CSS / DOM `querySelector`**.
+    - When evaluated by the browser DOM engine, it immediately threw an uncaught `DOMException: Failed to execute 'querySelector' on 'Document': '...:contains("Okay")...' is not a valid selector.`.
+    - This synchronous unhandled exception caused the click event listener to terminate immediately before reaching `window.location.href`, rendering the button completely dead with no visual feedback.
+    - Additionally, when browsing non-faction pages in Torn (Gym, Travel, Items, City), `memberStatusMap` was empty in memory, leaving the hit button without any target candidate to attack.
+  - **Architectural Implementation**:
+    1. *Safe DOM Querying & Traversal*:
+       - Replaced invalid pseudo-selector with standard CSS selector `document.querySelectorAll('.enemy-faction .members-list li, ...')` and safe vanilla JS iteration.
+       - Safely inspects `.status` / `.table-cell.status` text and uses `get_player_id_in_element(li)`.
+    2. *Smart Easiest Available Target Selection*:
+       - Filters for available (`Okay`) enemy targets in the active war.
+       - Evaluates candidates against cached Fair Fight / Battle Stats estimates, sorting ascending to pick the **easiest target** (lowest BS) first.
+       - If all enemies are hospitalized, falls back to the enemy with the shortest remaining time.
+    3. *Persistent Cross-Page War Enemy Caching (`cached_war_enemies`)*:
+       - Automatically stores active enemy faction IDs into persistent GM storage whenever Ranked War rosters are rendered or updated via API.
+       - Enables `[⚡ Hit]` to instantly launch an attack on an active war target even when browsing other pages of Torn.
+    4. *User-Configured Fallback Target (`emergency_hit_target`)*:
+       - Added extension menu command: `🎯 Set / Change Emergency Chain Target ID`.
+       - Allows users to designate a preferred chain target (e.g. Duke [4], leveling target, or inactive account) for normal non-war chains.
+       - If no target is cached or available, prompts the user to enter an ID to attack immediately or jump to Ranked War.
+    5. *Enhanced Click Interaction*:
+       - Added instant feedback toast (`⚡ Launching attack on [X]...`).
+       - Supported `Ctrl+Click` / `Cmd+Click` to open attack pages in a new tab.
+       - Wrapped in `try...catch` block to guarantee graceful recovery and visual error notification.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+    - Updated documentation in `README.md`.
+  - **Date & Time**: 2026-10-11 21:38:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
