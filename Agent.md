@@ -1254,5 +1254,38 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 21:38:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 74
+- **Focus**: Emergency Chain Hit Safety Engine & Strict Impossible Target Filter (`v2.93`).
+  - **Problem Reported**:
+    - User reported: *"hit option just gave me an impossible target omg"* with screenshot showing Merogie sent to attack Jocko (`Battle Stats: 2.48b (May be impossible)`, `Fair Fight: 26.98` in crimson red badge).
+  - **Root Cause Analysis**:
+    1. *Unbounded Minimum Search*:
+       - In `findEmergencyTargetId()`, `cached_war_enemies` initialized `bestId = cached[0]` (which was Jocko, the top enemy in the roster).
+       - When searching for lowest BS, Jocko's 2.48B stats satisfied `2.48b < Infinity`. If other members had null/unevaluated cache entries, Jocko was selected as the "lowest".
+    2. *Non-Null Priority Flaw*:
+       - In DOM sorting: `if (a.bs !== null) return -1;` placed members with known stats ahead of members with unknown stats, regardless of whether those stats were 2.48 Billion.
+    3. *Missing Threat Ceiling Check*:
+       - There was no check against `get_target_threat_info()` or `Fair Fight >= 3.20`. Even though the script displayed `(May be impossible)` on the attack screen, the target launcher had no filter preventing impossible titans from being attacked.
+  - **Architectural Fixes (`v2.93`)**:
+    1. *Dedicated Safety & Threat Evaluation Engine (`evaluateTargetSafety`)*:
+       - Strictly rejects any target whose threat tier is `'cannot_win'` (Crimson Red `#dc2626`) or `'mod_difficult'` (Orange `#f97316`).
+       - Strictly rejects any target with `Fair Fight >= 3.20`.
+       - Strictly rejects any target whose estimated battle stats exceed `1.35x` the player's battle stats (`myTotalBattleStats`).
+       - Marks confirmed winnable targets (`very_easy` [FF < 1.5], `easy` [FF < 2.2], `moderate` [FF < 3.2]) with `isSafe: true` and scores them so the easiest target (lowest FF / lowest BS) is chosen first.
+    2. *Ironclad Candidate Filtering in `findEmergencyTargetId()`*:
+       - Categorizes candidates into `safePool`, `unratedPool`, and `impossiblePool`.
+       - Any target flagged `impossible: true` (e.g. Jocko with 2.48B stats, FF 26.98) is strictly excluded and NEVER returned.
+       - If safe candidates exist, the easiest candidate is launched.
+       - If no safe war candidates are available, checks the user-configured emergency target (`emergency_hit_target`).
+       - If unrated candidates exist, picks the lowest level enemy instead of high-level titans.
+    3. *Zero-Suicide Safety Wall*:
+       - If ALL available war enemies are impossible titans (e.g. only 2.48B titans available), the script refuses to send the user to attack.
+       - Shows a prominent warning toast and prompt dialog allowing the user to enter an easy target (e.g. Duke [4]) or open the Ranked War roster safely without attacking.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+  - **Date & Time**: 2026-10-11 21:44:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 

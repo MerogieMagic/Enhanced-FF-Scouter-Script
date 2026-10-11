@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.92
+// @version      2.93
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.92;
+    const SCRIPT_VERSION = 2.93;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -2238,7 +2238,58 @@
         }
     }
 
+    // --- Emergency Target Safety & Threat Filtering Engine ---
+    function evaluateTargetSafety(playerId) {
+        if (!playerId) return { isSafe: false, score: Infinity, threat: null, bs: null, ff: null, impossible: true };
+        const resp = get_fair_fight_response(playerId);
+        if (!resp || resp.no_data) {
+            // Unrated / not yet evaluated in cache
+            return { isSafe: false, score: 5000, threat: null, bs: null, ff: null, unrated: true };
+        }
+
+        const threat = get_target_threat_info(resp);
+        const ff = typeof resp.value === 'number' ? resp.value : null;
+        let bs = null;
+        if (typeof resp.bs_estimate === 'number' && resp.bs_estimate > 0) {
+            bs = resp.bs_estimate;
+        } else if (typeof resp.bs_estimate_human === 'string') {
+            bs = parseBsStringToNumber(resp.bs_estimate_human);
+        }
+
+        // STRICT REJECTION: Impossible or difficult targets MUST NEVER BE PICKED
+        // 1. Threat tier 'cannot_win' (FF >= 4.2 or ratio >= 2.50x)
+        if (threat && threat.tier === 'cannot_win') {
+            return { isSafe: false, score: Infinity, threat, bs, ff, impossible: true };
+        }
+        // 2. Threat tier 'mod_difficult' (FF 3.2 - 4.2 or ratio 1.35x - 2.5x)
+        if (threat && threat.tier === 'mod_difficult') {
+            return { isSafe: false, score: Infinity, threat, bs, ff, impossible: true };
+        }
+        // 3. Direct Fair Fight check: FF >= 3.20 is dangerous / impossible
+        if (ff !== null && ff >= 3.20) {
+            return { isSafe: false, score: Infinity, threat, bs, ff, impossible: true };
+        }
+        // 4. Direct Battle Stats check vs player's stats: target > 1.35x player's stats is dangerous
+        if (bs !== null && myTotalBattleStats && myTotalBattleStats > 0 && bs > (myTotalBattleStats * 1.35)) {
+            return { isSafe: false, score: Infinity, threat, bs, ff, impossible: true };
+        }
+
+        // Target is confirmed SAFE & WINNABLE!
+        // Rank order: very_easy (FF < 1.5) > easy (FF < 2.2) > moderate (FF < 3.2)
+        let tierWeight = 300;
+        if (threat) {
+            if (threat.tier === 'very_easy') tierWeight = 10;
+            else if (threat.tier === 'easy') tierWeight = 50;
+            else if (threat.tier === 'moderate') tierWeight = 100;
+        }
+        const numericScore = tierWeight + (ff !== null ? ff : (bs ? bs / 1e7 : 10));
+
+        return { isSafe: true, score: numericScore, threat, bs, ff };
+    }
+
     function findEmergencyTargetId() {
+        const customTarget = rD_getValue('emergency_hit_target', '');
+
         // 1. Scan active DOM if on a faction war page
         try {
             const enemyLis = Array.from(document.querySelectorAll(
@@ -2254,10 +2305,9 @@
                     const isOkay = statusTxt.includes('okay') || 
                                    (!statusTxt.includes('hospital') && !statusTxt.includes('travel') && !statusTxt.includes('abroad') && !statusTxt.includes('jail'));
                     
-                    let bs = null;
-                    const resp = get_fair_fight_response(pid);
-                    if (resp && typeof resp.bs_estimate === 'number') bs = resp.bs_estimate;
-                    candidates.push({ pid, isOkay, bs });
+                    const level = parseInt(li.querySelector('.level, .table-cell.level')?.textContent?.trim() || '999', 10);
+                    const evalResult = evaluateTargetSafety(pid);
+                    candidates.push({ pid, isOkay, level, evalResult });
                 }
 
                 // Cache all enemy IDs for other pages
@@ -2266,22 +2316,25 @@
                     rD_setValue('cached_war_enemies', JSON.stringify(allEnemyIds));
                 }
 
-                // Available (Okay) targets first
-                const okayTargets = candidates.filter(c => c.isOkay);
-                if (okayTargets.length > 0) {
-                    // Sort lowest Battle Stats first
-                    okayTargets.sort((a, b) => {
-                        if (a.bs !== null && b.bs !== null) return a.bs - b.bs;
-                        if (a.bs !== null) return -1;
-                        if (b.bs !== null) return 1;
-                        return 0;
-                    });
-                    return okayTargets[0].pid;
+                // Filter for Okay targets that are confirmed SAFE (NEVER impossible)
+                const safeOkay = candidates.filter(c => c.isOkay && c.evalResult.isSafe);
+                if (safeOkay.length > 0) {
+                    // Sort lowest score (easiest target) first
+                    safeOkay.sort((a, b) => a.evalResult.score - b.evalResult.score);
+                    return safeOkay[0].pid;
                 }
 
-                // If all in hosp, pick the first candidate
-                if (candidates.length > 0) {
-                    return candidates[0].pid;
+                // If user has a configured emergency target, use that before risking unknown targets
+                if (customTarget && /^\d+$/.test(customTarget.trim())) {
+                    return customTarget.trim();
+                }
+
+                // If no confirmed safe targets, look for unrated Okay targets (EXCLUDING impossible ones)
+                const unratedOkay = candidates.filter(c => c.isOkay && !c.evalResult.impossible);
+                if (unratedOkay.length > 0) {
+                    // Sort by lowest level first (lower level = far less likely to be a titan)
+                    unratedOkay.sort((a, b) => a.level - b.level);
+                    return unratedOkay[0].pid;
                 }
             }
         } catch (e) {
@@ -2290,46 +2343,41 @@
 
         // 2. Scan in-memory memberStatusMap from API
         try {
-            const okayApiTargets = [];
+            const safeApiTargets = [];
             for (const [id, m] of Object.entries(memberStatusMap)) {
                 if (m && m.status && m.status.state === 'Okay') {
-                    let bs = null;
-                    const resp = get_fair_fight_response(id);
-                    if (resp && typeof resp.bs_estimate === 'number') bs = resp.bs_estimate;
-                    okayApiTargets.push({ id, bs });
+                    const evalResult = evaluateTargetSafety(id);
+                    if (evalResult.isSafe) {
+                        safeApiTargets.push({ id: String(id), evalResult });
+                    }
                 }
             }
-            if (okayApiTargets.length > 0) {
-                okayApiTargets.sort((a, b) => {
-                    if (a.bs !== null && b.bs !== null) return a.bs - b.bs;
-                    if (a.bs !== null) return -1;
-                    if (b.bs !== null) return 1;
-                    return 0;
-                });
-                return okayApiTargets[0].id;
+            if (safeApiTargets.length > 0) {
+                safeApiTargets.sort((a, b) => a.evalResult.score - b.evalResult.score);
+                return safeApiTargets[0].id;
             }
         } catch (e) {}
 
-        // 3. User-configured emergency chain target ID (e.g. Duke or designated target)
-        const customTarget = rD_getValue('emergency_hit_target', '');
+        // 3. User-configured emergency chain target ID
         if (customTarget && /^\d+$/.test(customTarget.trim())) {
             return customTarget.trim();
         }
 
-        // 4. Cached war enemies from previous visits (lowest BS first)
+        // 4. Cached war enemies from previous visits (ONLY SAFE TARGETS!)
         try {
             const cached = JSON.parse(rD_getValue('cached_war_enemies', '[]'));
             if (Array.isArray(cached) && cached.length > 0) {
-                let bestId = cached[0];
-                let minBs = Infinity;
+                const safeCached = [];
                 for (const id of cached) {
-                    const resp = get_fair_fight_response(id);
-                    if (resp && typeof resp.bs_estimate === 'number' && resp.bs_estimate < minBs) {
-                        minBs = resp.bs_estimate;
-                        bestId = id;
+                    const evalResult = evaluateTargetSafety(id);
+                    if (evalResult.isSafe) {
+                        safeCached.push({ id: String(id), evalResult });
                     }
                 }
-                return String(bestId);
+                if (safeCached.length > 0) {
+                    safeCached.sort((a, b) => a.evalResult.score - b.evalResult.score);
+                    return safeCached[0].id;
+                }
             }
         } catch (e) {}
 
@@ -2421,7 +2469,7 @@
                 try {
                     const targetId = findEmergencyTargetId();
                     if (targetId) {
-                        showToast(`⚡ Launching attack on [${targetId}]...`);
+                        showToast(`⚡ Launching attack on safe target [${targetId}]...`);
                         const targetUrl = `/page.php?sid=attack&user2ID=${targetId}`;
                         if (e.ctrlKey || e.metaKey) {
                             window.open(targetUrl, '_blank');
@@ -2429,23 +2477,22 @@
                             window.location.href = targetUrl;
                         }
                     } else {
-                        // Prompt user to enter a target ID or jump to Ranked War
+                        // All available war enemies are impossible or in hosp, and no safe target configured
                         const input = prompt(
-                            "⚡ Emergency Chain Hit:\n" +
-                            "No active war enemy target found in cache.\n\n" +
-                            "Enter a Player ID to attack immediately\n" +
-                            "(or click OK with blank input to open Ranked War):",
+                            "⚠️ WARNING: No safe / easy targets available!\n" +
+                            "All available war enemies are either impossible titans or hospitalized.\n\n" +
+                            "Enter an Easy Target ID to attack immediately (e.g. 4 for Duke):\n" +
+                            "(Leave blank or cancel to open Ranked War safely without attacking)",
                             ""
                         );
-                        if (input !== null) {
-                            const trimmed = input.trim();
-                            if (/^\d+$/.test(trimmed)) {
-                                rD_setValue('emergency_hit_target', trimmed);
-                                showToast(`⚡ Launching attack on [${trimmed}]...`);
-                                window.location.href = `/page.php?sid=attack&user2ID=${trimmed}`;
-                            } else {
-                                window.location.href = `/factions.php?step=your#/war/rank`;
-                            }
+                        if (input !== null && /^\d+$/.test(input.trim())) {
+                            const customId = input.trim();
+                            rD_setValue('emergency_hit_target', customId);
+                            showToast(`⚡ Launching attack on [${customId}]...`);
+                            window.location.href = `/page.php?sid=attack&user2ID=${customId}`;
+                        } else {
+                            showToast("⚠️ Opening Ranked War to select a target manually...");
+                            window.location.href = `/factions.php?step=your#/war/rank`;
                         }
                     }
                 } catch (err) {
