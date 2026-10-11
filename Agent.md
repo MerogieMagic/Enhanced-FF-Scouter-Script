@@ -1316,6 +1316,52 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 22:10:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 76
+- **Focus**: Ranked War Enemy Element Query Overhaul & Low-Level Target Prioritization (`v2.95`).
+  - **Problem Reported**:
+    - User reported: *"after updating clicking on hit still gives me this"* with screenshot (`media_1791728187539_d61ec82b.png`) on `https://www.torn.com/factions.php?step=your&type=1#/war/rank`.
+    - Clicking `[⚡ Hit]` during an active chain (03:27 remaining) displayed a warning dialog modal:
+      `"⚠️ WARNING: No safe / easy targets available! All available war enemies are either impossible titans or hospitalized. Enter an Easy Target ID to attack immediately..."` with a blank input box.
+  - **Root Cause Analysis**:
+    1. *Strict DOM Selector Failure in React War View*:
+       - In `findEmergencyTargetId()`, the enemy row query used:
+         `document.querySelectorAll('.enemy-faction .members-list li, [class*="enemyFaction"] .members-list li, [class*="opponentFaction"] .members-list li, .faction-war-view .enemy-faction li')`.
+       - In Torn's React-based Ranked War interface (`#/war/rank`), the opponent container uses CSS Modules (`[class*="opponentFaction"]`) and the member list uses `[class*="membersList___..."]` or `ul.table-body`. The literal class `.members-list` does NOT exist in React Ranked War!
+       - Consequently, the selector matched **zero (0)** rows. The entire war candidate evaluation was skipped despite 40 enemy members being visible on screen.
+    2. *Unrated Target Dismissal in Secondary Fallbacks*:
+       - In secondary API scanning (`memberStatusMap`) and cache scanning (`cached_war_enemies`), candidates were filtered with `if (evalResult.isSafe)`.
+       - Because unscouted/unrated enemies have `evalResult.unrated === true` and `evalResult.isSafe === false`, all unrated enemies were discarded even if they were low-level and available (`Okay`).
+    3. *Empty Input Default in Prompt Modal*:
+       - When falling through all tiers, `prompt(..., "")` displayed a blank input box. If a player was panic-hitting with seconds remaining on the chain timer, clicking OK or Enter had no effect.
+  - **Architectural Overhaul (`v2.95`)**:
+    1. *Universal Ranked War Member Row Extractor (`getEnemyMemberElements`)*:
+       - Strictly locates enemy/opponent containers: `[class*="opponentFaction"]`, `.enemy-faction`, `[class*="enemyFaction"]`, `.faction-war-view .enemy-faction`.
+       - Strictly excludes friendly faction containers: `[class*="currentFaction"]`, `[class*="yourFaction"]`, `.your-faction`.
+       - Traverses `a[href*="profiles.php?XID="]` and container row elements (`li`, `[class*="tableRow"]`, `[class*="membersList"] > li`, `ul.table-body > li`).
+       - Deduplicates player IDs using a `Set` and excludes `currentUserId`.
+    2. *Comprehensive Candidate Inspection*:
+       - **Status Detection**: Cross-checks Torn API status (`memberStatusMap[pid]?.status?.state === 'Okay'`), DOM `.status` / `[class*="status"]` text, hospital countdown timers (`\d+[hm]`), and active attack buttons (`a[href*="sid=attack"]`).
+       - **Level Detection**: Cross-checks API member level, DOM level cells (`.lvl`, `[class*="lvl"]`, `.level`), and regex matches.
+       - **Titan Filtering for Unrated Enemies**: In addition to `evaluateTargetSafety(pid)`, inspects DOM estimate badges (`.ff-scouter-bs-badge`, `[class*="estimate"]`). If estimated stats exceed `1.35x` the player's stats or exceed 500M, flags the target as `impossible: true` (e.g. titans like Jocko are immediately banned).
+    3. *Prioritized Target Resolution*:
+       - **Step 1A**: Confirmed SAFE Okay war enemies (`isSafe: true`, `!impossible`) sorted lowest score first.
+       - **Step 1B**: Unrated Okay war enemies (`!impossible`) sorted ascending by player level (`a.level - b.level`). Low-level enemies (e.g. Level 15–25) are prioritized; high-level titans are avoided.
+       - **Step 2**: In-memory `memberStatusMap` safe targets or lowest-level Okay targets.
+       - **Step 3**: User's compiled `custom_target_list` (personal target roster).
+       - **Step 4**: FF Scouter Innate Target Finder cache (`ff_innate_targets`, FF $\le$ 2.2).
+       - **Step 5**: User's configured emergency target (`emergency_hit_target`, default: 4).
+       - **Step 6**: Cached safe war enemies from previous visits.
+       - **Step 7**: Universal fallback Duke (`4`).
+    4. *Fail-Safe Panic UX*:
+       - In the Hit button click handler, if the manual entry prompt is ever shown, the input default is pre-filled with `"4"` (Duke).
+       - Pre-fetching of FF Scouter innate targets accelerated from 4.5s to 1.5s after load.
+       - Broadened `refreshFactionStatusData` container selectors to support React Ranked War member status decoration.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+    - Updated documentation in `README.md`.
+  - **Date & Time**: 2026-10-11 22:25:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
 
 
 

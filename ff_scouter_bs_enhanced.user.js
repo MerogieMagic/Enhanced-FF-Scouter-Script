@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.94
+// @version      2.95
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.94;
+    const SCRIPT_VERSION = 2.95;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -1625,26 +1625,26 @@
                     if (enemyIds.length > 0) {
                         rD_setValue('cached_war_enemies', JSON.stringify(enemyIds));
                     }
-                    const enemyContainer = document.querySelector(".enemy-faction .members-list, .faction-info-wrap .members-list");
-                    if (enemyContainer) {
-                        enemyContainer.querySelectorAll("li").forEach(li => {
+                    const enemyContainers = document.querySelectorAll(".enemy-faction, [class*='enemyFaction'], [class*='opponentFaction'], .faction-info-wrap");
+                    enemyContainers.forEach(enemyContainer => {
+                        enemyContainer.querySelectorAll("li, [class*='tableRow'], [class*='table-row']").forEach(li => {
                             const pid = get_player_id_in_element(li);
                             if (pid && memberStatusMap[pid]) updateMemberStatusDecoration(li, memberStatusMap[pid]);
                         });
-                    }
+                    });
                 }
             }
             if (yourId) {
                 const data = await fetchFactionMembers(yourId);
                 if (data && Array.isArray(data.members)) {
                     data.members.forEach(m => { memberStatusMap[m.id] = m; });
-                    const yourContainer = document.querySelector(".your-faction .members-list");
-                    if (yourContainer) {
-                        yourContainer.querySelectorAll("li").forEach(li => {
+                    const yourContainers = document.querySelectorAll(".your-faction, [class*='yourFaction'], [class*='currentFaction']");
+                    yourContainers.forEach(yourContainer => {
+                        yourContainer.querySelectorAll("li, [class*='tableRow'], [class*='table-row']").forEach(li => {
                             const pid = get_player_id_in_element(li);
                             if (pid && memberStatusMap[pid]) updateMemberStatusDecoration(li, memberStatusMap[pid]);
                         });
-                    }
+                    });
                 }
             }
             refreshActiveSorts();
@@ -2388,26 +2388,135 @@
         }
     }
 
+    // Helper to find all enemy member elements in DOM across Torn War pages
+    function getEnemyMemberElements() {
+        const results = [];
+        const seenPids = new Set();
+
+        function processRow(el) {
+            if (!el) return;
+            const pid = get_player_id_in_element(el);
+            if (!pid || seenPids.has(pid)) return;
+
+            // Ironclad filter: NEVER include current user or own faction members
+            if (currentUserId && String(pid) === String(currentUserId)) return;
+            if (el.closest && el.closest('[class*="currentFaction"], [class*="yourFaction"], .your-faction')) return;
+
+            seenPids.add(pid);
+            results.push({ el, pid });
+        }
+
+        // 1. Locate Opponent / Enemy Faction containers strictly
+        const enemyContainers = Array.from(document.querySelectorAll([
+            '[class*="opponentFaction"]',
+            '.enemy-faction',
+            '[class*="enemyFaction"]',
+            '.faction-war-view .enemy-faction',
+            '.factions-war-view .enemy-faction',
+            '.faction-info-wrap.enemy-faction'
+        ].join(', '))).filter(c => {
+            return !c.matches('[class*="currentFaction"], [class*="yourFaction"], .your-faction') &&
+                   !c.closest('[class*="currentFaction"], [class*="yourFaction"], .your-faction');
+        });
+
+        if (enemyContainers.length > 0) {
+            enemyContainers.forEach(container => {
+                // A. Check profile links inside the enemy container
+                const profileLinks = container.querySelectorAll('a[href*="profiles.php?XID="]');
+                profileLinks.forEach(a => {
+                    const row = (a.closest && a.closest('li, [class*="tableRow"], [class*="table-row"], div[class*="member___"]')) || a.parentElement;
+                    processRow(row);
+                });
+
+                // B. Check list items / table rows inside the enemy container
+                const rows = container.querySelectorAll('li, [class*="tableRow"], [class*="table-row"], [class*="membersList"] > li, ul.table-body > li');
+                rows.forEach(r => processRow(r));
+            });
+        }
+
+        // 2. Direct fallback across entire document if container wasn't identified
+        if (results.length === 0) {
+            const directEnemyRows = document.querySelectorAll([
+                'li.enemy-faction-member',
+                '[class*="enemyFactionMember"]',
+                '[class*="opponentMember"]',
+                'li[class*="opponent"]'
+            ].join(', '));
+            directEnemyRows.forEach(r => processRow(r));
+        }
+
+        return results;
+    }
+
     function findEmergencyTargetId() {
-        const customTarget = rD_getValue('emergency_hit_target', '');
+        const customTarget = rD_getValue('emergency_hit_target', '4');
 
         // 1. Scan active DOM if on a faction war page
         try {
-            const enemyLis = Array.from(document.querySelectorAll(
-                '.enemy-faction .members-list li, [class*="enemyFaction"] .members-list li, [class*="opponentFaction"] .members-list li, .faction-war-view .enemy-faction li'
-            ));
-            if (enemyLis.length > 0) {
+            const enemyRows = getEnemyMemberElements();
+            if (enemyRows.length > 0) {
                 const candidates = [];
-                for (const li of enemyLis) {
-                    const pid = get_player_id_in_element(li);
+                for (const { el, pid } of enemyRows) {
                     if (!pid) continue;
-                    const statusEl = li.querySelector('.status, .table-cell.status');
-                    const statusTxt = (statusEl ? statusEl.textContent : '').toLowerCase();
-                    const isOkay = statusTxt.includes('okay') || 
-                                   (!statusTxt.includes('hospital') && !statusTxt.includes('travel') && !statusTxt.includes('abroad') && !statusTxt.includes('jail'));
-                    
-                    const level = parseInt(li.querySelector('.level, .table-cell.level')?.textContent?.trim() || '999', 10);
+
+                    // Live Status detection
+                    let isOkay = false;
+                    const apiMember = memberStatusMap[pid];
+                    if (apiMember && apiMember.status && apiMember.status.state) {
+                        isOkay = (apiMember.status.state === 'Okay');
+                    } else {
+                        const statusEl = el.querySelector ? el.querySelector('.status, [class*="status"], .table-cell.status') : null;
+                        const statusTxt = (statusEl ? statusEl.textContent : el.textContent || '').toLowerCase();
+                        const isHospital = statusTxt.includes('hospital') || statusTxt.includes('hosp') || /\b\d+[hm]\s*\d*s?\b/.test(statusTxt);
+                        const isAway = statusTxt.includes('travel') || statusTxt.includes('abroad') || statusTxt.includes('jail') || statusTxt.includes('federal');
+                        if (isHospital || isAway) {
+                            isOkay = false;
+                        } else if (statusTxt.includes('okay')) {
+                            isOkay = true;
+                        } else {
+                            const atk = el.querySelector ? el.querySelector('a[href*="sid=attack"], a[href*="step=attack"], [class*="attack"]') : null;
+                            if (atk && !atk.classList.contains('disabled')) {
+                                isOkay = true;
+                            } else {
+                                isOkay = true;
+                            }
+                        }
+                    }
+
+                    // Level detection
+                    let level = 999;
+                    if (apiMember && apiMember.level) {
+                        level = parseInt(apiMember.level, 10);
+                    } else {
+                        const lvlEl = el.querySelector ? el.querySelector('.lvl, [class*="lvl"], .level, [class*="level"], .table-cell.lvl') : null;
+                        if (lvlEl) {
+                            const m = lvlEl.textContent.match(/\d+/);
+                            if (m) level = parseInt(m[0], 10);
+                        }
+                        if (level === 999) {
+                            const textMatch = (el.textContent || '').match(/\b(?:lvl|level)\s*:?\s*(\d+)\b/i);
+                            if (textMatch) level = parseInt(textMatch[1], 10);
+                        }
+                    }
+
+                    // Threat & Safety evaluation
                     const evalResult = evaluateTargetSafety(pid);
+
+                    // Cross-check DOM badge for unrated players
+                    const badge = el.querySelector ? el.querySelector('.ff-scouter-bs-badge, .table-cell.ff-bs-col, [class*="estimate"]') : null;
+                    if (badge && badge.textContent && !evalResult.impossible) {
+                        const domBs = parseBsStringToNumber(badge.textContent);
+                        if (domBs && domBs > 0) {
+                            if (myTotalBattleStats && myTotalBattleStats > 0 && domBs > (myTotalBattleStats * 1.35)) {
+                                evalResult.impossible = true;
+                                evalResult.isSafe = false;
+                            } else if (domBs > 500000000) {
+                                evalResult.impossible = true;
+                                evalResult.isSafe = false;
+                            }
+                        }
+                    }
+
                     candidates.push({ pid, isOkay, level, evalResult });
                 }
 
@@ -2417,20 +2526,14 @@
                     rD_setValue('cached_war_enemies', JSON.stringify(allEnemyIds));
                 }
 
-                // Filter for Okay targets that are confirmed SAFE (NEVER impossible)
-                const safeOkay = candidates.filter(c => c.isOkay && c.evalResult.isSafe);
+                // 1A. Filter for Okay targets that are confirmed SAFE (NEVER impossible)
+                const safeOkay = candidates.filter(c => c.isOkay && c.evalResult.isSafe && !c.evalResult.impossible);
                 if (safeOkay.length > 0) {
-                    // Sort lowest score (easiest target) first
                     safeOkay.sort((a, b) => a.evalResult.score - b.evalResult.score);
                     return safeOkay[0].pid;
                 }
 
-                // If user has a configured emergency target, use that before risking unknown targets
-                if (customTarget && /^\d+$/.test(customTarget.trim())) {
-                    return customTarget.trim();
-                }
-
-                // If no confirmed safe targets, look for unrated Okay targets (EXCLUDING impossible ones)
+                // 1B. Filter for unrated Okay targets (EXCLUDING impossible ones)
                 const unratedOkay = candidates.filter(c => c.isOkay && !c.evalResult.impossible);
                 if (unratedOkay.length > 0) {
                     // Sort by lowest level first (lower level = far less likely to be a titan)
@@ -2442,20 +2545,30 @@
             console.error("[FF Scouter] Error scanning DOM for emergency targets:", e);
         }
 
-        // 2. Scan in-memory memberStatusMap from API
+        // 2. Scan in-memory memberStatusMap from API (if on other pages or cached in memory)
         try {
             const safeApiTargets = [];
+            const unratedApiTargets = [];
             for (const [id, m] of Object.entries(memberStatusMap)) {
                 if (m && m.status && m.status.state === 'Okay') {
                     const evalResult = evaluateTargetSafety(id);
-                    if (evalResult.isSafe) {
-                        safeApiTargets.push({ id: String(id), evalResult });
+                    if (!evalResult.impossible) {
+                        const level = parseInt(m.level || '999', 10);
+                        if (evalResult.isSafe) {
+                            safeApiTargets.push({ id: String(id), evalResult });
+                        } else {
+                            unratedApiTargets.push({ id: String(id), level });
+                        }
                     }
                 }
             }
             if (safeApiTargets.length > 0) {
                 safeApiTargets.sort((a, b) => a.evalResult.score - b.evalResult.score);
                 return safeApiTargets[0].id;
+            }
+            if (unratedApiTargets.length > 0) {
+                unratedApiTargets.sort((a, b) => a.level - b.level);
+                return unratedApiTargets[0].id;
             }
         } catch (e) {}
 
@@ -2489,7 +2602,10 @@
 
         // 5. User-Configured Single Emergency Chain Target (e.g. Duke [4])
         if (customTarget && /^\d+$/.test(customTarget.trim())) {
-            return customTarget.trim();
+            const evalCustom = evaluateTargetSafety(customTarget.trim());
+            if (!evalCustom.impossible) {
+                return customTarget.trim();
+            }
         }
 
         // 6. Cached War Enemies from previous visits (ONLY SAFE TARGETS!)
@@ -2499,7 +2615,7 @@
                 const safeCached = [];
                 for (const id of cached) {
                     const evalResult = evaluateTargetSafety(id);
-                    if (evalResult.isSafe) {
+                    if (evalResult.isSafe && !evalResult.impossible) {
                         safeCached.push({ id: String(id), evalResult });
                     }
                 }
@@ -2510,7 +2626,8 @@
             }
         } catch (e) {}
 
-        return null;
+        // 7. Universal Fallback: Duke [4] (Torn NPC panic target, safe & always available)
+        return '4';
     }
 
     function createOrUpdateChainWidget() {
@@ -2610,9 +2727,9 @@
                         const input = prompt(
                             "⚠️ WARNING: No safe / easy targets available!\n" +
                             "All available war enemies are either impossible titans or hospitalized.\n\n" +
-                            "Enter an Easy Target ID to attack immediately (e.g. 4 for Duke):\n" +
+                            "Enter an Easy Target ID to attack immediately (default: 4 for Duke):\n" +
                             "(Leave blank or cancel to open Ranked War safely without attacking)",
-                            ""
+                            "4"
                         );
                         if (input !== null && /^\d+$/.test(input.trim())) {
                             const customId = input.trim();
@@ -2821,8 +2938,8 @@
     // Background auto-check for updates (once every 24h, 3s after startup)
     setTimeout(autoCheckForUpdates, 3000);
 
-    // Background pre-fetch of safe innate targets from FF Scouter Target Finder (4.5s after load)
-    setTimeout(() => { fetchFFScouterTargets(false); }, 4500);
+    // Background pre-fetch of safe innate targets from FF Scouter Target Finder (1.5s after load)
+    setTimeout(() => { fetchFFScouterTargets(false); }, 1500);
 
     console.log(`[FF Scouter + War Stuff Enhanced v${SCRIPT_VERSION}] Loaded Successfully.`);
 })();
