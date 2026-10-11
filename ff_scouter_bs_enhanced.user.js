@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.89
+// @version      2.90
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -22,7 +22,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.89;
+    const SCRIPT_VERSION = 2.90;
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
 
@@ -206,6 +206,25 @@
             const current = rD_getValue('copy_buttons_enabled', 'true') === 'true';
             rD_setValue('copy_buttons_enabled', (!current).toString());
             showToast(`Quick Copy Buttons ${!current ? 'Enabled' : 'Disabled'}`);
+            window.location.reload();
+        });
+
+        GM_registerMenuCommand('🔗 Toggle Chain Watcher Widget', () => {
+            const current = rD_getValue('chain_watcher_enabled', 'true') === 'true';
+            rD_setValue('chain_watcher_enabled', (!current).toString());
+            showToast(`Chain Watcher Widget ${!current ? 'Enabled' : 'Disabled'}`);
+            window.location.reload();
+        });
+
+        GM_registerMenuCommand('🔔 Toggle Chain Sound Alerts', () => {
+            const current = rD_getValue('chain_audio_enabled', 'true') === 'true';
+            rD_setValue('chain_audio_enabled', (!current).toString());
+            showToast(`Chain Sound Alerts ${!current ? 'Enabled' : 'Muted'}`);
+        });
+
+        GM_registerMenuCommand('📍 Reset Chain Watcher Position', () => {
+            rD_deleteValue('chain_widget_pos');
+            showToast('Chain Watcher position reset to default top-right.');
             window.location.reload();
         });
     }
@@ -623,6 +642,122 @@
         .ff-sortable-header:hover {
             color: #38bdf8 !important;
             text-shadow: 0 0 3px rgba(56, 189, 248, 0.4) !important;
+        }
+
+        /* --- Floating Chain Watcher Widget --- */
+        .ff-chain-widget {
+            position: fixed !important;
+            top: 52px;
+            right: 18px;
+            z-index: 999999 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 7px !important;
+            padding: 4px 10px !important;
+            background: rgba(15, 23, 42, 0.94) !important;
+            border: 1.5px solid var(--ff-chain-border, #38bdf8) !important;
+            border-radius: 6px !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55), 0 0 8px var(--ff-chain-glow, rgba(56, 189, 248, 0.35)) !important;
+            color: #ffffff !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
+            cursor: move !important;
+            user-select: none !important;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            box-sizing: border-box !important;
+        }
+
+        .ff-chain-widget.safe {
+            --ff-chain-border: #22c55e;
+            --ff-chain-glow: rgba(34, 197, 94, 0.4);
+        }
+
+        .ff-chain-widget.warning {
+            --ff-chain-border: #f59e0b;
+            --ff-chain-glow: rgba(245, 158, 11, 0.5);
+        }
+
+        .ff-chain-widget.danger {
+            --ff-chain-border: #ef4444;
+            --ff-chain-glow: rgba(239, 68, 68, 0.6);
+            animation: ff-chain-pulse 1.1s infinite ease-in-out !important;
+        }
+
+        .ff-chain-widget.panic {
+            --ff-chain-border: #dc2626;
+            --ff-chain-glow: rgba(220, 38, 38, 0.85);
+            animation: ff-chain-panic 0.55s infinite ease-in-out !important;
+        }
+
+        @keyframes ff-chain-pulse {
+            0% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.3); }
+            50% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.8); }
+            100% { box-shadow: 0 0 4px rgba(239, 68, 68, 0.3); }
+        }
+
+        @keyframes ff-chain-panic {
+            0% { box-shadow: 0 0 6px rgba(220, 38, 38, 0.4); transform: scale(1); }
+            50% { box-shadow: 0 0 16px rgba(220, 38, 38, 0.95); transform: scale(1.03); }
+            100% { box-shadow: 0 0 6px rgba(220, 38, 38, 0.4); transform: scale(1); }
+        }
+
+        .ff-chain-widget-timer {
+            font-family: monospace, monospace !important;
+            font-size: 13px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.5px !important;
+        }
+
+        .ff-chain-widget-count {
+            color: #e2e8f0 !important;
+            font-weight: 700 !important;
+        }
+
+        .ff-chain-widget-mult {
+            background: rgba(56, 189, 248, 0.2) !important;
+            border: 1px solid rgba(56, 189, 248, 0.4) !important;
+            color: #38bdf8 !important;
+            padding: 0 4px !important;
+            border-radius: 3px !important;
+            font-size: 10px !important;
+            font-weight: 700 !important;
+        }
+
+        .ff-chain-btn {
+            background: #334155 !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            color: #e2e8f0 !important;
+            border-radius: 3px !important;
+            padding: 1px 5px !important;
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            line-height: 14px !important;
+            transition: all 0.15s ease !important;
+        }
+
+        .ff-chain-btn:hover {
+            background: #475569 !important;
+            color: #ffffff !important;
+            border-color: rgba(255, 255, 255, 0.35) !important;
+        }
+
+        .ff-chain-btn.ff-chain-hit-btn {
+            background: rgba(239, 68, 68, 0.25) !important;
+            border-color: #ef4444 !important;
+            color: #fca5a5 !important;
+        }
+
+        .ff-chain-btn.ff-chain-hit-btn:hover {
+            background: rgba(239, 68, 68, 0.45) !important;
+            color: #ffffff !important;
+        }
+
+        .ff-chain-screen-panic {
+            box-shadow: inset 0 0 25px rgba(220, 38, 38, 0.45) !important;
         }
     `);
 
@@ -1876,6 +2011,297 @@
         }
     }
 
+    // --- Chain Watcher Architecture ---
+    const chainState = {
+        current: 0,
+        max: 0,
+        timeout: 0,       // Seconds remaining
+        modifier: 1.0,
+        cooldown: 0,
+        isActive: false,
+        lastFetch: 0
+    };
+
+    let lastAudioBucket = 999;
+
+    function playChainAlertSound(urgency = 'warning') {
+        if (rD_getValue('chain_audio_enabled', 'true') !== 'true') return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            if (urgency === 'panic') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.22, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.35);
+            } else if (urgency === 'danger') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(750, ctx.currentTime);
+                gain.gain.setValueAtTime(0.18, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.25);
+            } else {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.2);
+            }
+        } catch (e) {}
+    }
+
+    function readNativeSidebarChain() {
+        const chainBox = document.querySelector('[class*="chain-bar"], [class*="chainBar"], [class*="chainBox"], [class*="chain___"], #sidebarroot [class*="chain"]');
+        if (!chainBox) return false;
+
+        const text = chainBox.innerText || chainBox.textContent || '';
+        if (!text) return false;
+
+        const timeMatch = text.match(/(?:^|\s)(\d{1,2}):(\d{2})(?:$|\s)/);
+        if (timeMatch) {
+            const minutes = parseInt(timeMatch[1], 10);
+            const seconds = parseInt(timeMatch[2], 10);
+            chainState.timeout = (minutes * 60) + seconds;
+            chainState.isActive = chainState.timeout > 0;
+        }
+
+        const countMatch = text.match(/(\d+)\s*\/\s*(\d+)/);
+        if (countMatch) {
+            chainState.current = parseInt(countMatch[1], 10);
+            chainState.max = parseInt(countMatch[2], 10);
+            chainState.isActive = true;
+        } else {
+            const singleMatch = text.match(/(\d+)\s*hits?/i);
+            if (singleMatch) {
+                chainState.current = parseInt(singleMatch[1], 10);
+                chainState.isActive = true;
+            }
+        }
+
+        const multMatch = text.match(/(\d+\.\d+)x/i);
+        if (multMatch) {
+            chainState.modifier = parseFloat(multMatch[1]);
+        }
+
+        return chainState.isActive;
+    }
+
+    let chainApiFetchInProgress = false;
+    async function fetchFactionChainData() {
+        if (!apiKey || chainApiFetchInProgress) return;
+        const now = Date.now();
+        if (now - chainState.lastFetch < 20000) return; // Throttled to once per 20s
+
+        chainApiFetchInProgress = true;
+        chainState.lastFetch = now;
+        try {
+            const url = `https://api.torn.com/faction/?selections=chain&key=${apiKey}&comment=FFScouterChain`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.chain) {
+                    const c = data.chain;
+                    chainState.current = parseInt(c.current || '0', 10);
+                    chainState.max = parseInt(c.max || '0', 10);
+                    chainState.timeout = parseInt(c.timeout || '0', 10);
+                    chainState.modifier = parseFloat(c.modifier || '1.0');
+                    chainState.cooldown = parseInt(c.cooldown || '0', 10);
+                    chainState.isActive = chainState.current > 0 && chainState.timeout > 0;
+                }
+            }
+        } catch (e) {
+        } finally {
+            chainApiFetchInProgress = false;
+        }
+    }
+
+    function findEmergencyTargetId() {
+        const okayMember = document.querySelector('.enemy-faction .members-list li:has(.status:contains("Okay")), .enemy-faction .members-list li');
+        if (okayMember) {
+            const pid = get_player_id_in_element(okayMember);
+            if (pid) return pid;
+        }
+        for (const [id, m] of Object.entries(memberStatusMap)) {
+            if (m && m.status && m.status.state === 'Okay') {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    function createOrUpdateChainWidget() {
+        if (rD_getValue('chain_watcher_enabled', 'true') !== 'true') {
+            const existing = document.getElementById('ff-chain-watcher');
+            if (existing) existing.remove();
+            return;
+        }
+
+        if (!chainState.isActive && chainState.timeout <= 0 && chainState.current === 0) {
+            const existing = document.getElementById('ff-chain-watcher');
+            if (existing && existing.style.display !== 'none') existing.style.display = 'none';
+            return;
+        }
+
+        let widget = document.getElementById('ff-chain-watcher');
+        if (!widget) {
+            widget = document.createElement('div');
+            widget.id = 'ff-chain-watcher';
+            widget.className = 'ff-chain-widget';
+
+            try {
+                const pos = JSON.parse(rD_getValue('chain_widget_pos', 'null'));
+                if (pos && typeof pos.top === 'number' && typeof pos.left === 'number') {
+                    widget.style.top = `${pos.top}px`;
+                    widget.style.left = `${pos.left}px`;
+                    widget.style.right = 'auto';
+                }
+            } catch (e) {}
+
+            widget.innerHTML = `
+                <span class="ff-chain-icon" title="Faction Chain Watcher">🔗</span>
+                <span class="ff-chain-widget-count" title="Current hits / Next bonus milestone">0/0</span>
+                <span class="ff-chain-widget-timer" title="Chain time remaining">00:00</span>
+                <span class="ff-chain-widget-mult" title="Respect multiplier">1.0x</span>
+                <button type="button" class="ff-chain-btn ff-chain-audio-btn" title="Toggle audio alert">🔊</button>
+                <button type="button" class="ff-chain-btn ff-chain-hit-btn" title="Emergency hit target">⚡ Hit</button>
+            `;
+
+            let isDragging = false;
+            let startX, startY, startLeft, startTop;
+            widget.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                const rect = widget.getBoundingClientRect();
+                startLeft = rect.left;
+                startTop = rect.top;
+                widget.style.right = 'auto';
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                const newLeft = Math.max(10, Math.min(window.innerWidth - widget.offsetWidth - 10, startLeft + dx));
+                const newTop = Math.max(10, Math.min(window.innerHeight - widget.offsetHeight - 10, startTop + dy));
+                widget.style.left = `${newLeft}px`;
+                widget.style.top = `${newTop}px`;
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                const rect = widget.getBoundingClientRect();
+                rD_setValue('chain_widget_pos', JSON.stringify({ top: rect.top, left: rect.left }));
+            });
+
+            const audioBtn = widget.querySelector('.ff-chain-audio-btn');
+            audioBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const current = rD_getValue('chain_audio_enabled', 'true') === 'true';
+                rD_setValue('chain_audio_enabled', (!current).toString());
+                audioBtn.textContent = !current ? '🔊' : '🔇';
+                showToast(`Chain Audio Alerts ${!current ? 'Enabled' : 'Muted'}`);
+            });
+
+            const hitBtn = widget.querySelector('.ff-chain-hit-btn');
+            hitBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const targetId = findEmergencyTargetId();
+                if (targetId) {
+                    window.location.href = `/page.php?sid=attack&user2ID=${targetId}`;
+                } else {
+                    window.location.href = `/factions.php?step=your#/war/rank`;
+                }
+            });
+
+            document.body.appendChild(widget);
+        }
+
+        widget.style.display = 'inline-flex';
+
+        const audioBtn = widget.querySelector('.ff-chain-audio-btn');
+        if (audioBtn) {
+            const audioOn = rD_getValue('chain_audio_enabled', 'true') === 'true';
+            audioBtn.textContent = audioOn ? '🔊' : '🔇';
+        }
+
+        const countEl = widget.querySelector('.ff-chain-widget-count');
+        if (countEl) {
+            const countStr = chainState.max > 0 ? `${chainState.current}/${chainState.max}` : `${chainState.current}`;
+            if (countEl.textContent !== countStr) countEl.textContent = countStr;
+        }
+
+        const timerEl = widget.querySelector('.ff-chain-widget-timer');
+        const remainingSec = Math.max(0, chainState.timeout);
+        const timeStr = formatTime(remainingSec);
+        if (timerEl && timerEl.textContent !== timeStr) timerEl.textContent = timeStr;
+
+        const multEl = widget.querySelector('.ff-chain-widget-mult');
+        if (multEl) {
+            const multStr = `${chainState.modifier.toFixed(2)}x`;
+            if (multEl.textContent !== multStr) multEl.textContent = multStr;
+        }
+
+        if (remainingSec > 120) {
+            widget.className = 'ff-chain-widget safe';
+            lastAudioBucket = 999;
+            document.body.classList.remove('ff-chain-screen-panic');
+        } else if (remainingSec > 60) {
+            widget.className = 'ff-chain-widget warning';
+            document.body.classList.remove('ff-chain-screen-panic');
+            if (remainingSec <= 90 && lastAudioBucket > 90) {
+                lastAudioBucket = 90;
+                playChainAlertSound('warning');
+            }
+        } else if (remainingSec > 30) {
+            widget.className = 'ff-chain-widget danger';
+            document.body.classList.remove('ff-chain-screen-panic');
+            if (lastAudioBucket > 60) {
+                lastAudioBucket = 60;
+                playChainAlertSound('danger');
+            }
+        } else if (remainingSec > 0) {
+            widget.className = 'ff-chain-widget panic';
+            if (remainingSec <= 15) {
+                document.body.classList.add('ff-chain-screen-panic');
+            }
+            if (remainingSec <= 30 && lastAudioBucket > 30) {
+                lastAudioBucket = 30;
+                playChainAlertSound('panic');
+            }
+        } else {
+            widget.className = 'ff-chain-widget';
+            document.body.classList.remove('ff-chain-screen-panic');
+        }
+    }
+
+    function tickChainWatcher() {
+        const foundNative = readNativeSidebarChain();
+        if (!foundNative && chainState.timeout > 0) {
+            chainState.timeout--;
+            if (chainState.timeout <= 0) {
+                chainState.isActive = false;
+            }
+        }
+        createOrUpdateChainWidget();
+    }
+
     // --- Toast Notification ---
     function showToast(message) {
         const existing = document.getElementById('ffscouter-toast');
@@ -1974,6 +2400,11 @@
 
     // Periodic live countdown timers (1 second)
     setInterval(updateAllHospitalTimers, 1000);
+
+    // Periodic Chain Watcher live ticker (1 second) & API fallback sync (20 seconds)
+    setInterval(tickChainWatcher, 1000);
+    setInterval(fetchFactionChainData, 20000);
+    setTimeout(fetchFactionChainData, 1200);
 
     // Periodic faction API refresh (15 seconds) & Continuous table / sort bar cleaner
     if (window.location.href.includes("factions.php")) {

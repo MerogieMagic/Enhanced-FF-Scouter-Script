@@ -1152,3 +1152,41 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-11 17:21:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 71
+- **Focus**: Universal Faction Chain Watcher Widget & Web Audio Alert System Integration (`v2.90`).
+  - **Objective**: Incorporate a high-performance, real-time Chain Watcher directly into the userscript to monitor faction chains across all Torn pages without requiring separate standalone scripts.
+  - **Architectural Implementation**:
+    1. *Dual-Source Data Acquisition Engine*:
+       - **Primary Engine (Native DOM Reader)**:
+         - Scans Torn's native `#sidebarroot` and chain bar widgets (`[class*="chain-bar"]`, `[class*="chainBar"]`, `[class*="chainBox"]`).
+         - Parses current hits (`current / max`), countdown timer (`mm:ss`), and respect modifier (`1.50x`) with sub-second precision.
+         - Consumes **zero API calls** and avoids all API rate limits.
+       - **Secondary Engine (Torn API Fallback)**:
+         - Queries `https://api.torn.com/faction/?selections=chain&key=${apiKey}` every 20 seconds as server-side ground truth when the sidebar is hidden or on mobile view.
+         - Maintains client-side 1-second countdown ticker between API updates.
+    2. *Universal Floating Draggable Widget (`.ff-chain-widget`)*:
+       - Displays: `🔗 [Current/Max] • ⏱️ [MM:SS] • [Modifier]x • [🔊/🔇] • [⚡ Hit]`.
+       - Persists across all pages of Torn whenever a faction chain is active, smoothly hiding when peace returns.
+       - Draggable with pointer/mouse events; preserves custom user screen coordinates in storage (`chain_widget_pos`).
+       - Four urgency stages:
+         - 🟢 **Safe (> 120s)**: Vibrant green border (`#22c55e`), soft glow.
+         - 🟡 **Caution (60s–120s)**: Amber border (`#f59e0b`), amber glow.
+         - 🔴 **Danger (30s–60s)**: Red border (`#ef4444`), pulsing glow (`ff-chain-pulse`).
+         - ⚡ **Panic (< 30s)**: Crimson red border (`#dc2626`), rapid heartbeat pulse (`ff-chain-panic`), and screen edge red warning flash below 15s.
+    3. *Zero-Latency Web Audio Synthesizer*:
+       - Built-in audio oscillator using the standard Web Audio API (`AudioContext`).
+       - Requires zero external audio files and zero network downloads.
+       - Plays distinct acoustic chimes:
+         - Soft chime (587Hz) when timer drops below 90s.
+         - Danger pulse (750Hz) when timer drops below 60s.
+         - Rapid dual-tone alarm (880Hz -> 660Hz) when timer drops below 30s.
+       - State bucket tracker ensures it beeps exactly once per threshold without annoying looping.
+       - 1-Click Mute toggle button (`🔊` / `🔇`) directly on the widget and in extension menu.
+    4. *Emergency Hit Target Shortcut (`[⚡ Hit]`)*:
+       - 1-click button that immediately identifies the easiest currently available (`Okay`) enemy in Ranked War and opens their attack screen (`/page.php?sid=attack&user2ID=...`), or jumps directly to the active war roster.
+    5. *Extension Menu Controls*:
+       - Added `GM_registerMenuCommand` controls for toggling widget, toggling audio alarms, and resetting widget position.
+  - **Verification**: Verified JavaScript syntax via `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-11 17:31:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+

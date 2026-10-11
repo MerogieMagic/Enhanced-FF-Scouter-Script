@@ -27,6 +27,13 @@ Violentmonkey / Tampermonkey will automatically detect the script and prompt you
   - Live ticking countdown badges directly in faction member rosters.
   - Clickable hospital badges to instantly preload and stage attacks.
   - Live countdown banner and on-model overlay timer directly on attack screens (`page.php?sid=attack`).
+- **🔗 Universal Faction Chain Watcher Widget**:
+  - Floating, draggable chain status widget persisting across all Torn pages.
+  - Live hit counters (`current / milestone`), countdown timer (`mm:ss`), and respect modifier (`1.50x`).
+  - Dynamic urgency color indicators: 🟢 Safe (> 120s), 🟡 Caution (60s–120s), 🔴 Danger (< 60s), ⚡ Panic (< 30s with edge flash).
+  - Built-in zero-latency Web Audio chime alerts at 90s, 60s, and 30s (with 1-click mute toggle).
+  - Instant `[⚡ Hit Target]` emergency shortcut to quickly open attack pages and prevent chain drops.
+  - Dual-engine data sync: Reads native sidebar in real-time with zero API calls, with automatic API polling fallback.
 - **✈️ Travel & Overseas Status Badges**:
   - In-flight destination badge with live remaining travel countdown.
   - Overseas / abroad country indicators.
