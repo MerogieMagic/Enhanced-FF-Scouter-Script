@@ -1439,3 +1439,55 @@ Extracted directly via Torn API stock market endpoints:
     - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
   - **Date & Time**: 2026-10-11 23:41:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 79
+- **Focus**: Diagnosis & Comprehensive Fix for Main Faction Roster Sorting During Peaceful Times & Wars (`v2.98`).
+  - **User Directive**:
+    - User reported: *"sorting for the main faction list is not working. possibly affected when there is no active war"*.
+    - Screenshot (`media_1791804450868_6bc9da24.png`) demonstrated that on `factions.php?step=profile`, clicking `▼ Highest BS` toggled the active button in the toolbar, but the rows remained in their original unsorted order (e.g. `ZABRINA [84.5m]` remained at the top followed by `1.21m`, `4.45m`, `1.35m`, `189k`, `1.00b`, `1.53b`).
+  - **Root Cause Analysis**:
+    1. *`parseBsStringToNumber()` Regex Failure on Badges*:
+       - The regex `^([\d.]+)\s*([kmbt])?$` strictly required string start and end without extraneous characters.
+       - Honor bar badges contain brackets, whitespace, and formatting (e.g., `[ 84.5m ]`, `~84.5m`).
+       - As a result, `parseBsStringToNumber("[ 84.5m ]")` returned `null` for every row when falling back to DOM badge text, causing `bsNum = null` across all rows.
+       - In `bs_desc` and `bs_asc`, when both elements had `null` battle stats, the sort comparator returned `a.index - b.index`, completely leaving rows in their initial positions!
+    2. *CSS Flexbox `order` Failure on Torn Table Displays*:
+       - Modern Torn City uses native CSS table/block layouts on `ul.table-body` or parent wrappers where `display: flex !important` is either overridden by higher-specificity stylesheets or disrupts native table alignment.
+       - Without physical DOM node reordering, `item.li.style.order` had zero visual effect in the browser.
+    3. *`classifyMember()` Fallback Missing for Non-War Pages*:
+       - When no war was active, `memberStatusMap` was unpopulated or incomplete.
+       - `classifyMember` returned `rank: 7 (Unknown)` for every member because it only inspected `member.status` and skipped DOM parsing, preventing `war_hosp` from recognizing `Okay` or live hospital countdowns.
+    4. *Selector Mismatches in `refreshActiveSorts()` & `ensureWarSortBars()`*:
+       - `refreshActiveSorts()` queried `.members-list.ff-flex-sort[data-ff-sort-mode]`. On the main faction page, the list element is `ul.table-body`, not `.members-list`.
+       - `ensureWarSortBars()` container search lacked `.faction-profile`, `[class*="factionProfile"]`, `.factions-wrap`, and `[class*="factionsWrap"]`.
+  - **Architectural Implementation (`v2.98`)**:
+    1. *Dual Physical DOM Reordering & CSS Flex `order`*:
+       - In `sortMembersList()`, rows are now physically reordered via `parsed.forEach((item, rank) => { item.li.style.order = String(rank + 1); listElement.appendChild(item.li); });`.
+       - Because existing DOM nodes are re-appended to their parent, node references, event listeners, copy buttons, and React fiber references remain 100% intact while visual DOM ordering is guaranteed across all browsers.
+    2. *Faithful Default Restoration (`↺ Default`)*:
+       - Initial DOM order is recorded on rows using `data-ff-original-index`.
+       - Clicking `↺ Default` sorts by original index and re-appends rows back to their exact initial order.
+    3. *Ultra-Robust `parseBsStringToNumber()`*:
+       - Strips brackets, tildes, commas, and parentheses (`/[{}\[\]()~><,]/g`).
+       - Extracts numbers with optional units (`k`, `m`, `b`, `t`).
+       - Verified via Node.js scratch tests: `[ 84.5m ]` $\to 84,500,000$, `~1.53b` $\to 1,530,000,000$, `189k` $\to 189,000$.
+    4. *4-Tier Battle Stats Extraction Cascade*:
+       - Step 1: Cached Fair Fight estimate (`resp.bs_estimate` or `resp.bs_estimate_human`).
+       - Step 2: `data-ff-bs-num` attributes on the row or cells.
+       - Step 3: Dedicated Est. BS column (`.table-cell.ff-bs-col`) or honor bar badge text (`.ff-scouter-bs-badge`).
+       - Step 4: Full row scan for regex `[\d.]+\s*[kmbt]` badge text.
+    5. *Live DOM Status Text Parsing in `classifyMember()`*:
+       - Checks live DOM text (`Okay` $\to$ rank 1, hospital countdown timers `48:40` $\to$ rank 2 with seconds delta, `✈ TORN` $\to$ rank 3, abroad $\to$ rank 4).
+    6. *Torn API v1 Fallback & Faction ID Extraction*:
+       - Added fallback to Torn API v1 (`api.torn.com/faction/{id}?selections=basic`).
+       - Broadened regex matching to extract faction ID directly from `factions.php?step=profile&ID=...`.
+    7. *Header & Toolbar Synchronization*:
+       - Clicking `Est. BS` column header cycles sorting (Lowest $\to$ Highest $\to$ Default) and updates the active button on the war toolbar simultaneously.
+    8. *Re-entrancy Lock*:
+       - Added `isSortingList` mutex flag to prevent recursive sorting events during DOM re-insertion.
+  - **Verification**:
+    - Validated syntax using `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+    - Verified numeric parsing and sort stability via automated Node.js execution.
+  - **Date & Time**: 2026-10-12 19:42:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+

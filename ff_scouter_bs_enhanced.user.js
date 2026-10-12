@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.97
+// @version      2.98
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.97;
+    const SCRIPT_VERSION = 2.98;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -647,7 +647,11 @@
 
         /* Non-destructive Flexbox Battle Stats & Hosp Sorting */
         .members-list.ff-flex-sort,
-        .table-body.ff-flex-sort {
+        .table-body.ff-flex-sort,
+        [class*="membersList"].ff-flex-sort,
+        [class*="tableBody"].ff-flex-sort,
+        ul.ff-flex-sort,
+        .ff-flex-sort {
             display: flex !important;
             flex-direction: column !important;
         }
@@ -857,9 +861,11 @@
     }
 
     function parseBsStringToNumber(str) {
-        if (!str || typeof str !== 'string') return null;
-        str = str.trim().toLowerCase();
-        const match = str.match(/^([\d.]+)\s*([kmbt])?$/);
+        if (!str) return null;
+        if (typeof str === 'number') return str;
+        if (typeof str !== 'string') return null;
+        const clean = str.replace(/[{}\[\]()~><,]/g, ' ').trim().toLowerCase();
+        const match = clean.match(/([\d.]+)\s*([kmbt])?/);
         if (!match) return null;
         const num = parseFloat(match[1]);
         const unit = match[2];
@@ -1112,15 +1118,37 @@
 
     // --- Torn API Status & Travel Fetching ---
     async function fetchFactionMembers(factionID) {
-        if (!apiKey) return null;
-        const url = `https://api.torn.com/v2/faction/${factionID}/members?striptags=true&key=${apiKey}`;
+        if (!apiKey || !factionID) return null;
         try {
-            const res = await fetch(url);
-            if (!res.ok) return null;
-            return await res.json();
-        } catch (e) {
-            return null;
-        }
+            // Try Torn API v2 first
+            const urlV2 = `https://api.torn.com/v2/faction/${factionID}/members?striptags=true&key=${apiKey}`;
+            const resV2 = await fetch(urlV2);
+            if (resV2.ok) {
+                const data = await resV2.json();
+                if (data && Array.isArray(data.members)) return data;
+            }
+        } catch (e) {}
+
+        try {
+            // Robust fallback to Torn API v1
+            const urlV1 = `https://api.torn.com/faction/${factionID}?selections=basic&key=${apiKey}&comment=FFScouterFaction`;
+            const resV1 = await fetch(urlV1);
+            if (resV1.ok) {
+                const data = await resV1.json();
+                if (data && data.members) {
+                    const memberList = Object.entries(data.members).map(([id, m]) => ({
+                        id: parseInt(id, 10) || id,
+                        name: m.name || '',
+                        level: m.level || 0,
+                        status: m.status || { state: 'Okay', description: 'Okay' },
+                        last_action: m.last_action || { status: 'Offline' }
+                    }));
+                    return { members: memberList };
+                }
+            }
+        } catch (e) {}
+
+        return null;
     }
 
     const countryNames = [
@@ -1181,39 +1209,82 @@
     // 6: Traveling
     // 7: In Jail / Fedded / Fallen / Other
     function classifyMember(member, liveDomStatusText) {
-        if (!member || !member.status) {
-            return { rank: 7, delta: 999999, label: 'Unknown' };
-        }
-        const state = member.status.state || '';
-        const desc = member.status.description || '';
-        const until = parseInt(member.status.until || '0', 10);
-        const nowSec = Math.floor(Date.now() / 1000);
-        const delta = until > nowSec ? until - nowSec : 0;
+        const domTxt = (liveDomStatusText || '').trim();
+        const domLower = domTxt.toLowerCase();
 
-        if (liveDomStatusText && (liveDomStatusText.includes('Okay') || liveDomStatusText === 'okay') && state === 'Hospital' && delta > 0) {
-            return { rank: 0, delta: 0, label: 'Unexpected Okay (Medded!)' };
+        // 1. If we have live API member data
+        if (member && member.status) {
+            const state = member.status.state || '';
+            const desc = member.status.description || '';
+            const until = parseInt(member.status.until || '0', 10);
+            const nowSec = Math.floor(Date.now() / 1000);
+            const delta = until > nowSec ? until - nowSec : 0;
+
+            if (domLower.includes('okay') && state === 'Hospital' && delta > 0) {
+                return { rank: 0, delta: 0, label: 'Unexpected Okay (Medded!)' };
+            }
+
+            if (state === 'Okay') {
+                return { rank: 1, delta: 0, label: 'Okay' };
+            }
+
+            if (state === 'Hospital') {
+                return { rank: 2, delta: delta, label: 'Hospital' };
+            }
+
+            if (state === 'Traveling') {
+                if (/to\s+torn/i.test(desc) || /returning/i.test(desc)) {
+                    return { rank: 3, delta: delta, label: 'Incoming' };
+                }
+                return { rank: 5, delta: delta, label: 'Outgoing' };
+            }
+
+            if (state === 'Abroad') {
+                return { rank: 4, delta: delta, label: 'Abroad' };
+            }
+
+            return { rank: 7, delta: delta || 999999, label: state || 'Other' };
         }
 
-        if (state === 'Okay') {
+        // 2. Fallback directly to live DOM status text (e.g. peaceful faction profile or API loading)
+        if (domLower.includes('okay')) {
             return { rank: 1, delta: 0, label: 'Okay' };
         }
 
-        if (state === 'Hospital') {
-            return { rank: 2, delta: delta, label: 'Hospital' };
-        }
-
-        if (state === 'Traveling') {
-            if (/to\s+torn/i.test(desc) || /returning/i.test(desc)) {
-                return { rank: 3, delta: delta, label: 'Incoming' };
+        // Check hospital timer in DOM (e.g., "48:40" or "1h 12m")
+        const timeMatch = domTxt.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (timeMatch || domLower.includes('hospital') || domLower.includes('hosp')) {
+            let sec = 999999;
+            if (timeMatch) {
+                if (timeMatch[3]) {
+                    sec = parseInt(timeMatch[1], 10) * 3600 + parseInt(timeMatch[2], 10) * 60 + parseInt(timeMatch[3], 10);
+                } else {
+                    sec = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+                }
+            } else {
+                const hourMatch = domTxt.match(/(\d+)\s*h/i);
+                const minMatch = domTxt.match(/(\d+)\s*m/i);
+                if (hourMatch || minMatch) {
+                    sec = (hourMatch ? parseInt(hourMatch[1], 10) * 3600 : 0) + (minMatch ? parseInt(minMatch[1], 10) * 60 : 0);
+                }
             }
-            return { rank: 5, delta: delta, label: 'Outgoing' };
+            return { rank: 2, delta: sec, label: 'Hospital' };
         }
 
-        if (state === 'Abroad') {
-            return { rank: 4, delta: delta, label: 'Abroad' };
+        // Traveling / In flight
+        if (domTxt.includes('✈') || domLower.includes('travel') || domLower.includes('flight')) {
+            if (domLower.includes('torn') || domLower.includes('returning')) {
+                return { rank: 3, delta: 5000, label: 'Incoming' };
+            }
+            return { rank: 5, delta: 10000, label: 'Outgoing' };
         }
 
-        return { rank: 7, delta: delta || 999999, label: state || 'Other' };
+        // Abroad / Foreign country badge
+        if (domTxt.length > 0 && !domLower.includes('jail') && !domLower.includes('federal')) {
+            return { rank: 4, delta: 999999, label: 'Abroad' };
+        }
+
+        return { rank: 7, delta: 999999, label: 'Other' };
     }
 
     function getMemberOnlineTier(li, member) {
@@ -1477,10 +1548,17 @@
         let enemyId = enemyFactionLink?.href?.match(/ID=(\d+)/)?.[1];
         let yourId = yourFactionLink?.href?.match(/ID=(\d+)/)?.[1];
 
-        // Also check profile page faction
-        if (!enemyId && !yourId && window.location.href.includes("step=profile")) {
+        // Also check profile page faction (e.g. factions.php?step=profile&ID=1234 or factions.php?step=your)
+        if (!enemyId && !yourId) {
             const pageIdMatch = window.location.href.match(/ID=(\d+)/);
-            if (pageIdMatch) enemyId = pageIdMatch[1];
+            if (pageIdMatch) {
+                enemyId = pageIdMatch[1];
+            } else {
+                // Check on-page faction links
+                const anyFactionLink = document.querySelector("a[href*='step=profile&ID=']");
+                const m = anyFactionLink?.href?.match(/ID=(\d+)/);
+                if (m) enemyId = m[1];
+            }
         }
 
         if (!enemyId && !yourId) return;
@@ -1495,7 +1573,7 @@
                     if (enemyIds.length > 0) {
                         rD_setValue('cached_war_enemies', JSON.stringify(enemyIds));
                     }
-                    const enemyContainers = document.querySelectorAll(".enemy-faction, [class*='enemyFaction'], [class*='opponentFaction'], .faction-info-wrap");
+                    const enemyContainers = document.querySelectorAll(".enemy-faction, [class*='enemyFaction'], [class*='opponentFaction'], .faction-info-wrap, .faction-members, .factions-members, .factions-wrap, .members-list, ul.table-body");
                     enemyContainers.forEach(enemyContainer => {
                         enemyContainer.querySelectorAll("li, [class*='tableRow'], [class*='table-row']").forEach(li => {
                             const pid = get_player_id_in_element(li);
@@ -1504,7 +1582,7 @@
                     });
                 }
             }
-            if (yourId) {
+            if (yourId && yourId !== enemyId) {
                 const data = await fetchFactionMembers(yourId);
                 if (data && Array.isArray(data.members)) {
                     data.members.forEach(m => { memberStatusMap[m.id] = m; });
@@ -1526,128 +1604,188 @@
     }
 
     // --- Unified Sorting Engine (Battle Stats & Smart War / Hosp) ---
+    let isSortingList = false;
+
     function sortMembersList(listElement, mode) {
-        if (!listElement) return;
+        if (!listElement || isSortingList) return;
+        isSortingList = true;
 
-        listElement.classList.add('ff-flex-sort');
-        listElement.dataset.ffSortMode = mode;
+        try {
+            listElement.classList.add('ff-flex-sort');
+            listElement.dataset.ffSortMode = mode;
 
-        const items = Array.from(listElement.querySelectorAll(':scope > li'));
-        if (!items.length) return;
+            // Target player rows specifically, filtering out headers and extraneous divs
+            let items = Array.from(listElement.querySelectorAll(':scope > li, :scope > div.table-row, :scope > [class*="tableRow"]')).filter(el => {
+                if (el.classList.contains('table-header') || el.classList.contains('members-list-header') || el.querySelector('.table-header')) return false;
+                return !!(get_player_id_in_element(el) || el.querySelector('.member, [class*="member"], a[href*="profiles.php?XID="]'));
+            });
 
-        if (mode === 'default') {
-            items.forEach(li => { li.style.order = ''; });
-            return;
-        }
+            if (!items.length) {
+                items = Array.from(listElement.children).filter(el => {
+                    if (el.classList.contains('table-header') || el.classList.contains('members-list-header') || el.querySelector('.table-header')) return false;
+                    return !!(get_player_id_in_element(el) || el.querySelector('.member, [class*="member"], a[href*="profiles.php?XID="]'));
+                });
+            }
 
-        const parsed = items.map((li, index) => {
-            const playerId = get_player_id_in_element(li);
-            
-            // Battle Stats numeric value
-            let bsNum = null;
-            if (playerId) {
-                const resp = get_fair_fight_response(playerId);
-                if (resp) {
-                    if (typeof resp.bs_estimate === 'number' && resp.bs_estimate > 0) bsNum = resp.bs_estimate;
-                    else if (typeof resp.bs_estimate_human === 'string') bsNum = parseBsStringToNumber(resp.bs_estimate_human);
+            if (!items.length) return;
+
+            // Record initial visual order for 100% faithful default reset
+            items.forEach((item, idx) => {
+                if (!item.hasAttribute('data-ff-original-index')) {
+                    item.setAttribute('data-ff-original-index', String(idx));
                 }
+            });
+
+            if (mode === 'default') {
+                const sortedDefault = [...items].sort((a, b) => {
+                    const aIdx = parseInt(a.getAttribute('data-ff-original-index') || '0', 10);
+                    const bIdx = parseInt(b.getAttribute('data-ff-original-index') || '0', 10);
+                    return aIdx - bIdx;
+                });
+                sortedDefault.forEach(li => {
+                    li.style.order = '';
+                    listElement.appendChild(li);
+                });
+                return;
             }
-            if (bsNum === null) {
-                const badge = li.querySelector('.ff-scouter-bs-badge, .table-cell.ff-bs-col');
-                if (badge && badge.textContent) bsNum = parseBsStringToNumber(badge.textContent);
-            }
 
-            // War Status / Hospitalization Classification & Online Tier
-            const memberObj = playerId ? memberStatusMap[playerId] : null;
-            const liveStatusTxt = li.querySelector('.status, .table-cell.status')?.textContent || '';
-            const classification = classifyMember(memberObj, liveStatusTxt);
-            const onlineTier = getMemberOnlineTier(li, memberObj);
+            const parsed = items.map((li, index) => {
+                const playerId = get_player_id_in_element(li);
+                
+                // Battle Stats numeric value (4-step cascade)
+                let bsNum = null;
+                // 1. Cached Fair Fight estimate
+                if (playerId) {
+                    const resp = get_fair_fight_response(playerId);
+                    if (resp) {
+                        if (typeof resp.bs_estimate === 'number' && resp.bs_estimate > 0) bsNum = resp.bs_estimate;
+                        else if (typeof resp.bs_estimate_human === 'string') bsNum = parseBsStringToNumber(resp.bs_estimate_human);
+                    }
+                }
+                // 2. data-ff-bs-num attribute
+                if (bsNum === null) {
+                    const dataVal = li.getAttribute('data-ff-bs-num') || li.querySelector('[data-ff-bs-num]')?.getAttribute('data-ff-bs-num');
+                    if (dataVal) {
+                        const p = parseFloat(dataVal);
+                        if (!isNaN(p) && p > 0) bsNum = p;
+                    }
+                }
+                // 3. Dedicated Est. BS column or honor bar badge text
+                if (bsNum === null) {
+                    const badge = li.querySelector('.table-cell.ff-bs-col, .ff-bs-col, .ff-scouter-bs-badge, [class*="ff-bs-"]');
+                    if (badge && badge.textContent) bsNum = parseBsStringToNumber(badge.textContent);
+                }
+                // 4. Fallback search inside row for badge text matching numbers with k/m/b/t units
+                if (bsNum === null) {
+                    const allBadges = li.querySelectorAll('[class*="badge"], [class*="indicator"], span, div');
+                    for (let b = 0; b < allBadges.length; b++) {
+                        const txt = allBadges[b].textContent?.trim() || '';
+                        if (txt && /[\d.]+\s*[kmbt]/i.test(txt)) {
+                            const p = parseBsStringToNumber(txt);
+                            if (p !== null && p > 0) {
+                                bsNum = p;
+                                break;
+                            }
+                        }
+                    }
+                }
 
-            return {
-                li,
-                index,
-                playerId,
-                bsNum,
-                classRank: classification.rank,
-                delta: classification.delta,
-                onlineTier
-            };
-        });
+                // War Status / Hospitalization Classification & Online Tier
+                const memberObj = playerId ? memberStatusMap[playerId] : null;
+                const liveStatusTxt = li.querySelector('.status, .table-cell.status')?.textContent || '';
+                const classification = classifyMember(memberObj, liveStatusTxt);
+                const onlineTier = getMemberOnlineTier(li, memberObj);
 
-        if (mode === 'war_hosp') {
-            // Smart War Sorting:
-            // Available targets (classRank <= 1, i.e., Okay / Unexpected Okay):
-            // - Online targets first (onlineTier = 1), sorted by Battle Stats ascending
-            // - Idle targets second (onlineTier = 2), sorted by Battle Stats ascending
-            // - Offline targets third (onlineTier = 3), sorted by Battle Stats ascending
-            // Followed by:
-            // 2: In Hospital (Sorted ascending: least hospital time remaining first!)
-            // 3: Incoming flight (landing soonest first)
-            // 4: Abroad
-            // 5: Outgoing flight
-            // 6: Traveling
-            // 7: Other
-            parsed.sort((a, b) => {
-                const aIsOkay = a.classRank <= 1;
-                const bIsOkay = b.classRank <= 1;
+                return {
+                    li,
+                    index,
+                    playerId,
+                    bsNum,
+                    classRank: classification.rank,
+                    delta: classification.delta,
+                    onlineTier
+                };
+            });
 
-                if (aIsOkay && bIsOkay) {
-                    // Both are available targets: sort onliners to top
-                    if (a.onlineTier !== b.onlineTier) return a.onlineTier - b.onlineTier;
-                    // Within same online tier, sort by Battle Stats ascending (lowest BS first)
+            if (mode === 'war_hosp') {
+                // Smart War Sorting:
+                // Available targets (classRank <= 1, i.e., Okay / Unexpected Okay):
+                // - Online targets first (onlineTier = 1), sorted by Battle Stats ascending
+                // - Idle targets second (onlineTier = 2), sorted by Battle Stats ascending
+                // - Offline targets third (onlineTier = 3), sorted by Battle Stats ascending
+                // Followed by:
+                // 2: In Hospital (Sorted ascending: least hospital time remaining first!)
+                // 3: Incoming flight (landing soonest first)
+                // 4: Abroad
+                // 5: Outgoing flight
+                // 6: Traveling
+                // 7: Other
+                parsed.sort((a, b) => {
+                    const aIsOkay = a.classRank <= 1;
+                    const bIsOkay = b.classRank <= 1;
+
+                    if (aIsOkay && bIsOkay) {
+                        // Both are available targets: sort onliners to top
+                        if (a.onlineTier !== b.onlineTier) return a.onlineTier - b.onlineTier;
+                        // Within same online tier, sort by Battle Stats ascending (lowest BS first)
+                        if (a.bsNum !== null && b.bsNum !== null) return a.bsNum - b.bsNum;
+                        if (a.bsNum !== null && b.bsNum === null) return -1;
+                        if (a.bsNum === null && b.bsNum !== null) return 1;
+                        return a.index - b.index;
+                    }
+
+                    if (aIsOkay && !bIsOkay) return -1;
+                    if (!aIsOkay && bIsOkay) return 1;
+
+                    // Non-available targets: sort by classRank (Hospital -> Incoming -> Abroad -> Outgoing)
+                    if (a.classRank !== b.classRank) return a.classRank - b.classRank;
+
+                    // For same classRank (e.g. Hospital or Incoming flight): least time remaining first
+                    if (a.delta !== b.delta) return a.delta - b.delta;
+
+                    // Then sort by Battle Stats ascending
                     if (a.bsNum !== null && b.bsNum !== null) return a.bsNum - b.bsNum;
                     if (a.bsNum !== null && b.bsNum === null) return -1;
                     if (a.bsNum === null && b.bsNum !== null) return 1;
+
                     return a.index - b.index;
-                }
-
-                if (aIsOkay && !bIsOkay) return -1;
-                if (!aIsOkay && bIsOkay) return 1;
-
-                // Non-available targets: sort by classRank (Hospital -> Incoming -> Abroad -> Outgoing)
-                if (a.classRank !== b.classRank) return a.classRank - b.classRank;
-
-                // For same classRank (e.g. Hospital or Incoming flight): least time remaining first
-                if (a.delta !== b.delta) return a.delta - b.delta;
-
-                // Then sort by Battle Stats ascending
-                if (a.bsNum !== null && b.bsNum !== null) return a.bsNum - b.bsNum;
-                if (a.bsNum !== null && b.bsNum === null) return -1;
-                if (a.bsNum === null && b.bsNum !== null) return 1;
-
-                return a.index - b.index;
-            });
-        } else if (mode === 'bs_asc') {
-            // Lowest BS first (easiest targets on top)
-            parsed.sort((a, b) => {
-                if (a.bsNum !== null && b.bsNum !== null) {
-                    if (a.bsNum !== b.bsNum) return a.bsNum - b.bsNum;
+                });
+            } else if (mode === 'bs_asc') {
+                // Lowest BS first (easiest targets on top)
+                parsed.sort((a, b) => {
+                    if (a.bsNum !== null && b.bsNum !== null) {
+                        if (a.bsNum !== b.bsNum) return a.bsNum - b.bsNum;
+                        return a.index - b.index;
+                    }
+                    if (a.bsNum !== null && b.bsNum === null) return -1;
+                    if (a.bsNum === null && b.bsNum !== null) return 1;
                     return a.index - b.index;
-                }
-                if (a.bsNum !== null && b.bsNum === null) return -1;
-                if (a.bsNum === null && b.bsNum !== null) return 1;
-                return a.index - b.index;
-            });
-        } else if (mode === 'bs_desc') {
-            // Highest BS first (titans on top)
-            parsed.sort((a, b) => {
-                if (a.bsNum !== null && b.bsNum !== null) {
-                    if (a.bsNum !== b.bsNum) return b.bsNum - a.bsNum;
+                });
+            } else if (mode === 'bs_desc') {
+                // Highest BS first (titans on top)
+                parsed.sort((a, b) => {
+                    if (a.bsNum !== null && b.bsNum !== null) {
+                        if (a.bsNum !== b.bsNum) return b.bsNum - a.bsNum;
+                        return a.index - b.index;
+                    }
+                    if (a.bsNum !== null && b.bsNum === null) return -1;
+                    if (a.bsNum === null && b.bsNum !== null) return 1;
                     return a.index - b.index;
-                }
-                if (a.bsNum !== null && b.bsNum === null) return -1;
-                if (a.bsNum === null && b.bsNum !== null) return 1;
-                return a.index - b.index;
+                });
+            }
+
+            // Dual reordering: assign CSS flex order AND physically re-append in sorted order
+            parsed.forEach((item, rank) => {
+                item.li.style.order = String(rank + 1);
+                listElement.appendChild(item.li);
             });
+        } finally {
+            isSortingList = false;
         }
-
-        parsed.forEach((item, rank) => {
-            item.li.style.order = String(rank + 1);
-        });
     }
 
     function refreshActiveSorts() {
-        const activeLists = document.querySelectorAll('.members-list.ff-flex-sort[data-ff-sort-mode]');
+        const activeLists = document.querySelectorAll('.ff-flex-sort[data-ff-sort-mode], [data-ff-sort-mode]');
         activeLists.forEach(list => {
             const mode = list.dataset.ffSortMode;
             if (mode && mode !== 'default') {
@@ -1702,8 +1840,9 @@
                 });
             });
 
-            // Auto-sort by Hosp / War if enabled
-            if (rD_getValue('auto_war_sort', 'true') === 'true') {
+            // Auto-sort by Hosp / War if enabled AND on a war page (don't force-sort peaceful profiles on load)
+            const isWarPage = window.location.href.includes('war') || !!document.querySelector('.faction-war-view, .enemy-faction, [class*="enemyFaction"]');
+            if (rD_getValue('auto_war_sort', 'true') === 'true' && isWarPage) {
                 setActiveButton('war_hosp');
                 sortMembersList(listElement, 'war_hosp');
             }
@@ -1744,10 +1883,10 @@
 
     function ensureWarSortBars() {
         const memberLists = document.querySelectorAll(
-            '.members-list, ul.table-body, [class*="membersList___"], [class*="membersList"]'
+            '.members-list, ul.table-body, [class*="membersList___"], [class*="membersList"], [class*="tableBody"]'
         );
         memberLists.forEach(listElement => {
-            const container = listElement.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .factions-wrap > div') || listElement.parentElement;
+            const container = listElement.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .faction-profile, [class*="factionProfile"], .factions-wrap, [class*="factionsWrap"]') || listElement.parentElement;
             if (container && listElement) {
                 setupWarSortBar(container, listElement);
                 if (container.matches && container.matches('.enemy-faction, [class*="enemyFaction"], [class*="opponentFaction"]')) {
@@ -1828,7 +1967,7 @@
                         e.preventDefault();
                         e.stopPropagation();
                         // Find matching list/body for THIS specific header's container
-                        const parentContainer = headerContainer.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .factions-wrap > div') || headerContainer.parentElement;
+                        const parentContainer = headerContainer.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .faction-profile, [class*="factionProfile"], .factions-wrap, [class*="factionsWrap"]') || headerContainer.parentElement;
                         const tableBody = parentContainer ? parentContainer.querySelector('.table-body, .members-list, [class*="tableBody"], [class*="membersList"]') : document.querySelector('.table-body, .members-list, [class*="tableBody"], [class*="membersList"]');
                         if (!tableBody) return;
                         const currentDir = tableBody.dataset.ffSortMode || 'default';
@@ -1838,6 +1977,16 @@
                         else if (currentDir === 'bs_desc') nextDir = 'default';
 
                         headerBS.textContent = nextDir === 'bs_asc' ? 'Est. BS ▲' : (nextDir === 'bs_desc' ? 'Est. BS ▼' : 'Est. BS');
+
+                        // Sync toolbar button state
+                        const toolbar = parentContainer ? parentContainer.querySelector('.ff-war-sort-toolbar') : document.querySelector('.ff-war-sort-toolbar');
+                        if (toolbar) {
+                            toolbar.querySelectorAll('.ff-sort-btn').forEach(btn => {
+                                if (btn.dataset.mode === nextDir) btn.classList.add('active');
+                                else btn.classList.remove('active');
+                            });
+                        }
+
                         sortMembersList(tableBody, nextDir);
                     });
                 }
@@ -1893,6 +2042,12 @@
                 const threat = get_target_threat_info(resp);
                 const rawBs = resp.bs_estimate || resp.bs_estimate_human;
                 const bsText = rawBs ? formatBattleStats(rawBs) : '-';
+                const parsedBs = rawBs ? (typeof rawBs === 'number' ? rawBs : parseBsStringToNumber(rawBs)) : null;
+
+                if (parsedBs) {
+                    bsCell.setAttribute('data-ff-bs-num', String(parsedBs));
+                    row.setAttribute('data-ff-bs-num', String(parsedBs));
+                }
 
                 if (bsCell.textContent !== bsText) bsCell.textContent = bsText;
                 if (threat && threat.tier !== 'unrated') {
@@ -1940,6 +2095,7 @@
 
                     const rawBs = response.bs_estimate || response.bs_estimate_human;
                     const bsValue = rawBs ? formatBattleStats(rawBs) : (response.value ? `FF ${Math.round(response.value)}` : null);
+                    const parsedBs = rawBs ? (typeof rawBs === 'number' ? rawBs : parseBsStringToNumber(rawBs)) : null;
 
                     if (bsValue) {
                         let badge = element.querySelector('.ff-scouter-bs-badge');
@@ -1950,6 +2106,10 @@
                         }
                         if (badge.textContent !== bsValue) badge.textContent = bsValue;
                         badge.style.backgroundColor = threat.badgeBg;
+                        if (parsedBs) {
+                            badge.setAttribute('data-ff-bs-num', String(parsedBs));
+                            element.setAttribute('data-ff-bs-num', String(parsedBs));
+                        }
                     } else {
                         const existingBadge = element.querySelector('.ff-scouter-bs-badge');
                         if (existingBadge) existingBadge.remove();
