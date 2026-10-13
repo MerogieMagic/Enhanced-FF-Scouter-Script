@@ -1539,4 +1539,27 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-13 09:50:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 81
+- **Focus**: Execution Specifications for Car Re-Gearing, Nickname Conventions & Racing Assistance Workflow.
+  - **User Confirmation**:
+    - User approved the 3 strategic recommendations:
+      1. Deploying the fully upgraded Edomondo NSX on Technical tracks (Underdog, Meltdown, Sewage, Industrial, Docks).
+      2. Re-gearing the Echo R8 with Paddle Shift (Long Ratio) and Adjustable Coilovers (18 racing points).
+      3. Updating in-game car nicknames for immediate visual track recognition.
+  - **Action Plan & Execution Steps Formulated**:
+    1. *Echo R8 Mechanical Re-Gearing Guide (Cost: 18 Points)*:
+       - Transmission: Swap `Rally Gearbox (Long Ratio)` (ID 86) $\to$ `Paddle Shift Gearbox (Long Ratio)` (ID 84, 10 pts).
+       - Suspension: Swap `Coil-over Suspension (Medium)` (ID 74) $\to$ `Adjustable Coilover Suspension` (ID 93, 8 pts).
+       - Eliminates $-2$ Tarmac penalty; yields Top Speed `103`, Accel `108`, Braking `71`, Handling `84`, Tarmac `54`.
+    2. *Standardized Garage Nickname Conventions*:
+       - **Veloria LFA**: `Speed (Upto,With,Speed,Conv)`
+       - **Edomondo NSX**: `Tech (Under,Melt,Sew,Ind,Dock)`
+       - **Colina Tanprice**: `Dirt (Mudpit,Hammer,Park)`
+       - **Echo R8**: `Balance (Comm,Stone,2Isle,Vec)`
+    3. *Proposed Userscript Enhancement*:
+       - Propose integrating an automatic Course-to-Car Advisor into `ff_scouter_bs_enhanced.user.js` on `sid=racing` to highlight the optimal vehicle in the car selection interface automatically.
+  - **Date & Time**: 2026-10-13 13:20:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
