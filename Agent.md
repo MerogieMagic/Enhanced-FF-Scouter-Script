@@ -1683,6 +1683,36 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-13 21:20:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 86
+- **Focus**: Delivery of `tornpda_war_enhanced.user.js` (v9.4) & Native Torn PDA Architecture Compliance.
+  - **User Directive**:
+    - User uploaded 5 screenshots from Torn PDA's official documentation covering script behavior, runtime API key substitution, re-injection constraints, update headers, and War Mode.
+  - **Architectural Implementation & Native PDA Adaptations**:
+    1. *`###PDA-APIKEY###` Runtime Substitution*:
+       - Declared `const PDA_INJECTED_KEY = "###PDA-APIKEY###";`.
+       - Updated `getApiKey()` to prioritize `PDA_INJECTED_KEY`.
+       - Torn PDA automatically detects this token at runtime and replaces it with the user's active API key, enabling 100% zero-configuration authentication for mobile players.
+       - Fallback to `localStorage` preserved for desktop and cross-platform use.
+    2. *Re-Injection Singleton Guard*:
+       - Added `window.__TORNPDA_WAR_ENHANCED_ACTIVE__` flag per Torn PDA's injection constraints documentation.
+       - Prevents duplicate `setInterval` tickers, duplicated `.tornpda-ctrl-container` buttons, and memory leaks when Torn PDA re-injects on paginated pages or page refreshes.
+       - Registered `window.__TORNPDA_WAR_ENHANCED_RECHECK__` so secondary injections safely refresh the DOM sort and controls without duplicate instances.
+    3. *Torn PDA Header Compliance & Lightweight Meta Updates*:
+       - Added `// @run-at document-end` in userscript metadata.
+       - Created `tornpda_war_enhanced.meta.js` containing only the metadata block.
+       - Pointed `@updateURL` to `tornpda_war_enhanced.meta.js` so Torn PDA's background update checker downloads only ~300 bytes instead of the full userscript payload.
+    4. *Resilient Style Injection (`safeAddStyle`)*:
+       - Handled environments where `GM_addStyle` is not shipped by injecting standard `<style>` nodes into `<head>`.
+    5. *War Mode Compatibility*:
+       - Script is fully structured for Torn PDA's native **War Mode**, allowing players to toggle it as their dedicated combat script while suppressing non-combat extensions during ranked wars and faction chains.
+  - **Verification & Deployment**:
+    - Validated syntax via `node --check tornpda_war_enhanced.user.js` and `node --check tornpda_war_enhanced.meta.js` (exit code 0).
+    - Updated `README.md` with v9.4 documentation and Torn PDA features.
+    - Pushed commit to GitHub repository (`Enhanced-FF-Scouter-Script`) on `main` branch.
+  - **Date & Time**: 2026-10-13 21:36:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 

@@ -14,14 +14,16 @@ An all-in-one userscript for [Torn City](https://www.torn.com) combining real-ti
 
 ---
 
-### 📱 Option 2: Mobile (Torn PDA App - v9.3)
-Designed specifically for mobile performance in Torn PDA (zero lag, 3-s.f. battle stats, onlines-first smart war sorting, under-name badge alignment or dedicated column, 7-tier threat badges):
+### 📱 Option 2: Mobile (Torn PDA App - v9.4)
+Tailored to Torn PDA's native script specifications (`###PDA-APIKEY###` auto-auth, War Mode compatibility, re-injection guards, 3-s.f. stats, onlines-first smart sorting, under-name badge alignment):
 1. In Torn PDA, navigate to **Settings** $\rightarrow$ **Advanced** $\rightarrow$ **User Scripts** (or your Scripts manager).
 2. Tap **Add Script / Link** and paste the following direct URL:
 
    👉 **`https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js`** 👈
 
-3. Torn PDA will automatically check for updates and stay synced with GitHub releases!
+3. **Zero-Setup API Authentication**: Torn PDA replaces `###PDA-APIKEY###` with your active PDA key automatically at runtime.
+4. **War Mode Compatible**: You can toggle this script inside Torn PDA's **War Mode** to suppress all other scripts during active wars and chains for maximum frame rate.
+5. Torn PDA will automatically check for updates using the lightweight `tornpda_war_enhanced.meta.js` header!
 
 
 ---

@@ -1,23 +1,33 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.3
+// @version      9.4
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Tom Chew, rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @match        https://www.torn.com/*
+// @run-at       document-end
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @connect      api.torn.com
 // @connect      ffscouter.com
 // @connect      raw.githubusercontent.com
 // @downloadURL  https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js
-// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js
+// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.meta.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 9.3;
+    // Guard against multiple injection on dynamic page reloads (per Torn PDA guidelines)
+    if (window.__TORNPDA_WAR_ENHANCED_ACTIVE__) {
+        if (typeof window.__TORNPDA_WAR_ENHANCED_RECHECK__ === 'function') {
+            window.__TORNPDA_WAR_ENHANCED_RECHECK__();
+        }
+        return;
+    }
+    window.__TORNPDA_WAR_ENHANCED_ACTIVE__ = true;
+
+    const SCRIPT_VERSION = 9.4;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js";
     const SETTINGS_KEY = 'tornpda-war-sorter-settings-v9';
     const CACHE_PREFIX = 'tornpda_ff_cache_';
@@ -25,8 +35,23 @@
     const FF_API_BASE = 'https://ffscouter.com/api/v1';
     const BATCH_SIZE = 150;
 
+    // Native Torn PDA runtime-injected key macro
+    const PDA_INJECTED_KEY = "###PDA-APIKEY###";
+
+    // Safe style injector with fallback for WebViews without GM_addStyle
+    function safeAddStyle(css) {
+        if (typeof GM_addStyle === 'function') {
+            GM_addStyle(css);
+        } else {
+            const style = document.createElement('style');
+            style.type = 'text/css';
+            style.textContent = css;
+            (document.head || document.documentElement).appendChild(style);
+        }
+    }
+
     // --- 1. STYLES ---
-    GM_addStyle(`
+    safeAddStyle(`
         .tornpda-hide { display: none !important; }
 
         .tornpda-status-box {
@@ -275,6 +300,11 @@
 
     // --- 2. API CREDENTIALS & PERSISTENT STORAGE ---
     function getApiKey() {
+        // Priority 1: Check runtime key injected automatically by Torn PDA
+        if (PDA_INJECTED_KEY && !PDA_INJECTED_KEY.includes('###') && PDA_INJECTED_KEY.trim().length >= 16) {
+            return PDA_INJECTED_KEY.trim();
+        }
+        // Priority 2: Fall back to persistent localStorage keys
         try {
             let v3key = localStorage.getItem('ffsv3-configkey');
             if (v3key) return JSON.parse(v3key).value;
@@ -1016,6 +1046,7 @@
 
     function createMobileControls() {
         if (!PAGE.faction) return;
+        if (document.querySelector('.tornpda-ctrl-container')) return;
 
         const ctrlContainer = document.createElement('div');
         ctrlContainer.className = 'tornpda-ctrl-container';
@@ -1177,6 +1208,13 @@
             if (ids.length > 0) queueIdsForFetch(ids, true);
         }, 1500);
     }
+
+    window.__TORNPDA_WAR_ENHANCED_RECHECK__ = () => {
+        if (PAGE.faction) {
+            createMobileControls();
+            sortAndFilterRoster();
+        }
+    };
 
     console.log(`[TornPDA War Sorter & FF Scouter v${SCRIPT_VERSION}] Loaded Successfully.`);
 })();
