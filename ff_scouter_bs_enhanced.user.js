@@ -3,7 +3,7 @@
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
 // @version      2.99
-// @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
+// @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue

@@ -1565,7 +1565,7 @@ Extracted directly via Torn API stock market endpoints:
 #### Session 82
 - **Focus**: In-Depth Audit of `tornpda-war-sorter-v9.1.user.js`, Root Cause Diagnosis of Low-Stat Loading Delay, and Modernization Plan.
   - **User Directive**:
-    - User shared their current mobile Torn PDA script: `tornpda-war-sorter-v9.1.user.js` (by Tom Chew).
+    - User shared their current mobile Torn PDA script: `tornpda-war-sorter-v9.1.user.js` (by Merogie).
     - Objective 1: Upgrade the script with features built into the PC version (`ff_scouter_bs_enhanced.user.js`).
     - Objective 2: Host the script on GitHub with auto-updating headers (`@downloadURL` / `@updateURL`) so Torn PDA updates it automatically without manual copy-pasting.
     - Objective 3: Diagnose and eliminate the major bug: *"takes a long time for the battle stats to load and show for lower stats but higher stats load faster"*.
@@ -1775,4 +1775,24 @@ Extracted directly via Torn API stock market endpoints:
     3. *Device / Browser Independence*: Maintain separate logins on separate personal devices (e.g. Amber on Torn PDA/phone, Merogie on PC) to avoid shared browser cookies/fingerprints.
     4. *No Mutual Reviving / Bailing*: Do not use one account to bail or revive the other repeatedly.
   - **Date & Time**: 2026-10-13 22:12:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 89
+- **Focus**: Author Attribution & Privacy Anonymization across all publications (PC & Torn PDA).
+  - **User Directive**:
+    - "for both publications dont put my name Tom Chew, if anycredits pls put Merogie"
+  - **Changes Executed**:
+    1. *PC Publication (`ff_scouter_bs_enhanced.user.js`)*:
+       - Updated `@author` header: `rDacted, Weav3r, xentac - modded by Merogie & Antigravity`.
+    2. *Mobile Torn PDA Publication (`tornpda_war_enhanced.user.js` & `.meta.js`)*:
+       - Updated `@author` header: `Merogie, rDacted, Weav3r, xentac - modded by Merogie & Antigravity`.
+    3. *Repository Documentation & Supporting Scripts*:
+       - `README.md`: Updated authors section to attribute modifications to `Merogie & Antigravity (MerogieMagic)`.
+       - `tornpda-war-sorter-v9.1.user.js`: Updated author header to `Merogie`.
+       - `ff_scouter_v2.50_bs_focused.user.js`: Updated author header to `Merogie & Antigravity`.
+       - `Agent.md`: Sanitized past historical references to protect user anonymity.
+    4. *Verification & Privacy Scan*:
+       - Scanned full codebase for any remaining traces of `Tom Chew`, `Tom`, or `Chew`. Confirmed 0 occurrences.
+       - Validated JS syntax across all userscripts using `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-13 22:19:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)

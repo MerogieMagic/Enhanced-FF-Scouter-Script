@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      9.1
 // @description  Custom attack/status tags, battle-stats badges everywhere a name appears (faction, profile, bounty, mini-profile popup, forums, HoF, company, joblist, messages, index, hospital), configurable multi-field sort, and filters.
-// @author       Tom Chew
+// @author       Merogie
 // @match        https://www.torn.com/*
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest

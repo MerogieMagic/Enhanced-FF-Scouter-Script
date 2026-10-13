@@ -82,4 +82,4 @@ The script is **100% generic** and contains **no hardcoded keys or personal user
 ## 📜 Authors & Credits
 
 - **Original Authors**: rDacted, Weav3r, xentac
-- **Modifications & Enhancements**: GFOUR & Antigravity (MerogieMagic)
+- **Modifications & Enhancements**: Merogie & Antigravity (MerogieMagic)
