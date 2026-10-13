@@ -1866,3 +1866,19 @@ Extracted directly via Torn API stock market endpoints:
     - Created `.gitignore` to protect SQLite binary database (`*.db`) from repository bloat.
   - **Date & Time**: 2026-10-13 23:09:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 92
+- **Focus**: Immediate Shutdown & Deactivation of Restock Tracker Backend, Discrepancy & Inaccuracy Analysis.
+  - **User Directive**:
+    - "stop, disable for now, it doesnt seem accurate"
+  - **Actions Executed**:
+    1. *Immediate Process Termination*:
+       - Cancelled and killed background daemon task (`task-3860`, `python -m restock_tracker.run`).
+       - Verified all local TCP listening sockets on port `8765` closed (state: `TimeWait` -> closed). Zero background polling processes active.
+    2. *Root Cause Investigation of Perceived Inaccuracy*:
+       - **Torn API Server-Side Caching Latency**: The official Torn API endpoint (`api.torn.com/torn/?selections=cityshops`) utilizes internal server-side caching (typically 30–60 seconds). In high-demand items (Beer, Blood Bags), hundreds of active players and market buy-bots exhaust 1,000 to 5,000 units within seconds of restock. Consequently, the API may report remaining units while the live web page (`shop.php`) is already sold out.
+       - **Local Polling Latency**: A 20s client poll combined with Torn's 30–60s API cache creates an unavoidable window of desynchronization against the live web shop.
+    3. *Status*:
+       - Entire restock tracking backend and userscript polling are fully disabled and stopped.
+  - **Date & Time**: 2026-10-13 23:18:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
