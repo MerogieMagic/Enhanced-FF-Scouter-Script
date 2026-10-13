@@ -6,12 +6,23 @@ An all-in-one userscript for [Torn City](https://www.torn.com) combining real-ti
 
 ## 🚀 One-Click Installation
 
-1. Install a userscript manager such as [Violentmonkey](https://violentmonkey.github.io/) or [Tampermonkey](https://www.tampermonkey.net/).
+### 🖥️ Option 1: Desktop Browser (Tampermonkey / Violentmonkey)
+1. Install [Violentmonkey](https://violentmonkey.github.io/) or [Tampermonkey](https://www.tampermonkey.net/).
 2. Click the installation link below:
    
-   👉 **[Click Here to Install Script](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js)** 👈
+   👉 **[Click Here to Install PC Script (v2.98)](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js)** 👈
 
-Violentmonkey / Tampermonkey will automatically detect the script and prompt you to install.
+---
+
+### 📱 Option 2: Mobile (Torn PDA App)
+Designed specifically for mobile performance in Torn PDA (zero lag, persistent caching, 7-tier threat badges, smart sorting):
+1. In Torn PDA, navigate to **Settings** $\rightarrow$ **Advanced** $\rightarrow$ **User Scripts** (or your Scripts manager).
+2. Tap **Add Script / Link** and paste the following direct URL:
+
+   👉 **`https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js`** 👈
+
+3. Torn PDA will automatically check for updates and stay synced with GitHub releases!
+
 
 ---
 

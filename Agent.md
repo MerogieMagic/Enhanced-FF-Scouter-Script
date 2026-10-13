@@ -1609,6 +1609,45 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-13 20:49:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 84
+- **Focus**: Delivery of Modernized `tornpda_war_enhanced.user.js` (v9.2), Low-Stat Priority Overhaul & GitHub Auto-Update Pipeline.
+  - **User Directive**:
+    - Build modernized mobile userscript based on `tornpda-war-sorter-v9.1.user.js` for Torn PDA.
+    - Fix low-stat loading bottleneck.
+    - Host on GitHub with auto-update headers (`@downloadURL` / `@updateURL`).
+    - Integrate PC version features (persistent caching, 7-tier badges, clickable hospital timers, attack screen staging, copy buttons, dual DOM sorting).
+  - **Architectural Overhaul & Engineering Details**:
+    1. *Low-Stat Bottleneck Elimination*:
+       - Inverted queue ordering: In `enqueueStaleIds()`, visible DOM elements are prioritized first, and remaining IDs are sorted descending by Player ID (`Number(b) - Number(a)`). Newer accounts with lower stats (higher IDs) are fetched in the initial batch instead of being starved.
+       - Implemented persistent 1-hour `localStorage` cache (`tornpda_ff_cache_*`). Target battle stats load in **0ms** across page visits and tab switches without re-requesting the network.
+    2. *7-Tier Battle Stats Threat Badges*:
+       - `< 1M`: Slate Gray (`#64748b`)
+       - `1M – 10M`: Forest Green (`#16a34a`)
+       - `10M – 50M`: Sky Blue (`#0284c7`)
+       - `50M – 250M`: Royal Blue (`#2563eb`)
+       - `250M – 1B`: Royal Purple (`#7c3aed`)
+       - `1B – 5B`: Burnt Orange (`#ea580c`)
+       - `5B+`: Crimson Red (`#dc2626`)
+    3. *Clickable Hospital Countdown & Direct Attack Staging*:
+       - Hospital badges render live ticking remaining countdowns.
+       - Tapping the badge redirects immediately to `loader.php?sid=attack&user2ID=...` (or `page.php?sid=attack`), allowing mobile players to stage an attack before the target leaves hospital.
+       - On `sid=attack`, rendered mobile countdown banner and overlay on the opponent's avatar so the attacker can strike the exact second they step out.
+    4. *1-Click Fast Copy Buttons*:
+       - Added `.twse-copy-btn` next to player names for instant copying (`PlayerName [12345]`).
+    5. *Dual Physical DOM & CSS Flexbox Sorting*:
+       - Implemented physical DOM re-ordering (`list.appendChild(row)`) in addition to CSS `order` to ensure sorting renders correctly across Torn PDA's Flutter InAppWebView engine.
+       - Added live DOM status text parsing so sorting works during peacetime/non-war faction rosters.
+    6. *GitHub Distribution & Auto-Update Engine*:
+       - Set `@downloadURL` and `@updateURL` pointing to `https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js`.
+       - Added manual `🔄 Check for Updates` button inside the floating `⚙️` Filter/Settings panel.
+  - **Verification & Deployment**:
+    - Validated syntax with `node --check tornpda_war_enhanced.user.js` (exit code 0).
+    - Updated `README.md` with direct 1-click Torn PDA installation URL and instructions.
+    - Pushed to GitHub repository (`Enhanced-FF-Scouter-Script`) on `main` branch.
+  - **Date & Time**: 2026-10-13 20:52:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
