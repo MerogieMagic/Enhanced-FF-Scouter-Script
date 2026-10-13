@@ -1821,3 +1821,48 @@ Extracted directly via Torn API stock market endpoints:
     - Consulted user regarding preferred platform (Browser Userscript vs. Standalone Python CLI / Background Daemon vs. Both), alert channels (audio chime, browser notification, in-game HUD bar), and auto-navigation behavior.
   - **Date & Time**: 2026-10-13 22:25:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 91
+- **Focus**: Delivery of Torn City Shop Restock Tracker Backend, SQLite Time-Series Database, Predictive Modeling Engine & Companion Browser Userscript.
+  - **User Directive**:
+    - "i think we can host a backend which we query and store data in a db file would be good. Hopefully with data on the availability we could eventually use it to also come up with predictive models."
+  - **Live Telemetry & Restock Tick Verified Live**:
+    - During initial probing, observed real-time shop dynamics:
+      - Bits 'n' Bobs (103) restocked Bottle of Beer (180) to 5,000 units, followed by rapid live depletion to 1,365 units.
+      - Kitten Plushies (215) restocked to 1,642 units.
+      - Pharmacy (110) Empty Blood Bags (731) depleted from 1,000 -> 900 -> 700 -> 13 units.
+      - Confirmed that depleted items are omitted from shop inventory (`stock = 0`), requiring explicit absence handling.
+  - **Backend Architecture & Engineering Details (`restock_tracker/`)**:
+    1. *SQLite Time-Series Schema (`database.py`)*:
+       - `stock_snapshots`: Complete historical snapshots across all 14 city shops (timestamp, UTC datetime, hour, minute, second, day of week, shop_id, item_id, in_stock, price, delta).
+       - `restock_events`: Discrete restock events (item_id, shop_id, restock_timestamp, minute, second, prev_stock, new_stock, added, depleted_timestamp, duration_seconds, depletion_rate_per_sec).
+       - `latest_stock`: Fast in-memory state table for instant zero-latency lookups.
+    2. *Statistical & Predictive Modeling Engine (`predict.py`)*:
+       - Computes restock interval mean ($\mu$), variance ($\sigma^2$), min/max intervals.
+       - Generates hourly minute probability distribution (:00, :15, :30, :45 vs random ticks).
+       - Calculates depletion burn rate (units/sec) and time-to-depletion.
+       - Forecasts next restock ETA countdown and overdue/imminent hazard flags.
+    3. *Polling Engine & Alert Dispatcher (`engine.py` & `notify.py`)*:
+       - Dual-key failover and rotation (Merogie & AmberTJY API keys).
+       - Dynamic smart polling: 20s base rate; automatically accelerates to 6s around restock tick windows (:00, :15, :30, :45).
+       - Dispatches console alert banners, Windows synthesizer chimes (`winsound.Beep`), and native Windows 10/11 toast notifications via PowerShell.
+    4. *Multithreaded REST API & Dark-Mode Dashboard (`server.py`)*:
+       - Runs on `http://127.0.0.1:8765`.
+       - Endpoints:
+         - `GET /api/status`: Live stock for tracked items and all shops.
+         - `GET /api/events`: Recent restock history.
+         - `GET /api/predictions`: Statistical metrics and ETAs.
+         - `GET /api/health`: Database row counts and health telemetry.
+         - `GET /`: Interactive web dashboard with real-time stock cards, countdown badges, and direct Torn shop launch links.
+    5. *Companion Browser Userscript (`torn_restock_alerts.user.js`)*:
+       - Real-time floating HUD status pill in the bottom-right corner of Torn City.
+       - Visual glow/pulse + web audio chime on restock.
+       - Quick Buy helper on `shop.php` that pre-fills maximum quantity (100) and triggers buy in 1 click.
+       - Automatic fallback to direct Torn API if local backend is offline.
+  - **Verification & Deployment**:
+    - Validated Python modules and launched background daemon successfully.
+    - Verified `http://127.0.0.1:8765/api/health` (154 snapshots recorded, 2ms latency).
+    - Verified userscript syntax using `node --check torn_restock_alerts.user.js` (exit code 0).
+    - Created `.gitignore` to protect SQLite binary database (`*.db`) from repository bloat.
+  - **Date & Time**: 2026-10-13 23:09:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)

@@ -1,0 +1,51 @@
+{
+  "api_keys": [
+    "AtiA2TzPEfHgOr3x",
+    "TJn8SndJa8hRGsPl"
+  ],
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765
+  },
+  "polling": {
+    "base_interval_seconds": 20,
+    "fast_interval_seconds": 6,
+    "fast_window_minutes": [0, 15, 30, 45],
+    "fast_window_buffer_seconds": 90
+  },
+  "alerts": {
+    "audio_chime": true,
+    "windows_notification": true,
+    "min_restock_amount": 50
+  },
+  "tracked_items": {
+    "180": {
+      "name": "Bottle of Beer",
+      "shop_id": 103,
+      "shop_name": "Bits 'n' Bobs",
+      "shop_step": "bitsnbobs",
+      "alert_enabled": true
+    },
+    "731": {
+      "name": "Empty Blood Bag",
+      "shop_id": 110,
+      "shop_name": "Pharmacy",
+      "shop_step": "pharmacy",
+      "alert_enabled": true
+    },
+    "310": {
+      "name": "Lollipop",
+      "shop_id": 101,
+      "shop_name": "Sally's Sweet Shop",
+      "shop_step": "candy",
+      "alert_enabled": true
+    },
+    "215": {
+      "name": "Kitten Plushie",
+      "shop_id": 103,
+      "shop_name": "Bits 'n' Bobs",
+      "shop_step": "bitsnbobs",
+      "alert_enabled": true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Logs & temp
+*.log
+profile.html
