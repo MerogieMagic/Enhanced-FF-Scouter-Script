@@ -36,7 +36,7 @@ Design a premier, high-fidelity, and fully responsive profile signature page for
 * **Best Killstreak**: `64`
 * **Respect Contributed to Faction**: `14,541`
 * **Total Awards**: `276` (152 Honors, 124 Medals)
-* **Racing Skill**: `20`
+* **Racing Skill**: `22.16` (1,285 Races, 258 Wins, 1,449 Racing Points Earned)
 * **Crimes 2.0 Maxed Skills (100/100)**: Search for Cash, Bootlegging, Graffiti, Shoplifting, Pickpocketing, Cardskimming
 
 ---
@@ -1490,4 +1490,53 @@ Extracted directly via Torn API stock market endpoints:
     - Verified numeric parsing and sort stability via automated Node.js execution.
   - **Date & Time**: 2026-10-12 19:42:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 80
+- **Focus**: Complete Extraction & Optimization Audit of Racing Career, Car Upgrades & Course Synergy (`Torn API v2`).
+  - **User Directive**:
+    - User request: *"are you able to collect all my racing history and car upgrades? i would like to see and plan for optimization of car upgrades and car to course"*.
+  - **Data Collection via Torn API v2**:
+    1. *Driver Profile*:
+       - Racing Skill: `22.16`
+       - Total Official Races Entered: `1,285` (API archive contains `1,259` granular records with full telemetry)
+       - Total Wins: `258` (20.1% Overall Career Win Rate)
+       - Total Racing Points Earned: `1,449`
+       - Points Invested in Cars: `1,344` (Available unspent points: `~105`)
+    2. *Enlisted Garage Breakdown*:
+       - **Colina Tanprice** [Class B, ID `1265214`, Name: *"Mudpit,Hammerhead"*]:
+         - Points Spent: `311` (53 installed parts)
+         - Role: Dedicated Dirt / Rally Off-Road specialist
+         - Stats: TopSpeed `92`, Accel `99`, Braking `60`, Handling `74`, Safety `51`, **Dirt `46`**, Tarmac `29`
+         - Key Parts: Group N Rally Suspension (ID 94), Rally Gearbox Short Ratio (ID 87), Rally Tires (ID 47).
+         - Track Record: **Mudpit** 50.0% WR (20W/40R), **Hammerhead** 45.5% WR (10W/22R), **Parkland** 45.0% WR (9W/20R), **Stone Park** 50.0% WR (11W/22R).
+       - **Echo R8** [Class A, ID `1276508`, Name: *"Comm, with"*]:
+         - Points Spent: `311` (53 installed parts)
+         - Role: Former primary workhorse (620 races, 86 wins, 13.9% WR)
+         - Stats: TopSpeed `103`, Accel `108`, Braking `70`, Handling `83`, Safety `61`, Dirt `36`, Tarmac `49`
+         - Suboptimal Setup Identified: Medium Coilovers (ID 74) + Long Ratio Rally Gearbox (ID 86) imposes a **$-2$ Tarmac penalty** while running Track Tires on tarmac tracks.
+       - **Veloria LFA** [Class A, ID `1304671`, Name: *"Upto, Withd, Speed,vec"*]:
+         - Points Spent: `311` (53 installed parts)
+         - Role: High-Speed Long Straightaway Dominator
+         - Stats: **TopSpeed `113`**, **Accel `108`**, Braking `65`, Handling `79`, Safety `61`, Dirt `29`, **Tarmac `56`**
+         - Key Parts: Adjustable Coilover Suspension (ID 93), Paddle Shift Gearbox Long Ratio (ID 84), Track Tires (ID 46).
+         - Track Record: **Speedway** 63.6% WR (14W/22R, Best Lap: 26.57s), **Convict** 53.3% WR (8W/15R, Best Lap: 60.07s). Suffers on tight technical tracks (0% WR on Sewage, Two Islands, Meltdown).
+       - **Edomondo NSX** [Class A, ID `1373855`, Name: *"Edomondo NSX"*]:
+         - Points Spent: `311` (53 installed parts)
+         - Role: Tight Technical / Twisty Tarmac Specialist (Underutilized Hidden Gem!)
+         - Stats: TopSpeed `102`, Accel `104`, **Braking `75`**, **Handling `84`**, Safety `61`, Dirt `29`, **Tarmac `56`**
+         - Key Parts: Adjustable Coilover Suspension (ID 93), Paddle Shift Gearbox Short Ratio (ID 85), Track Tires (ID 46).
+         - Status: Fully upgraded but only entered in 2 races total.
+       - **Bavaria X5** [Class D, ID `1253805`, Retired]: 20 pts spent, 39 races, 19 wins (48.7% WR).
+       - **Knight Firebrand** [Class C, ID `1257822`, Retired]: 80 pts spent, 67 races, 34 wins (50.7% WR).
+    3. *Course-to-Car Mismatch Diagnosis*:
+       - Merogie suffered low win rates on technical tracks: Underdog (9.5%), Meltdown (9.5%), Industrial (8.9%), Sewage (9.0%), and Docks (11.7%).
+       - Root cause: Merogie was deploying the Echo R8 (hampered by its rally gearbox) or the Veloria LFA (geared for long straights), while leaving the high-handling, short-ratio **Edomondo NSX** completely un-raced.
+    4. *Strategic Optimization Plan*:
+       - Deploy **Veloria LFA** exclusively on Speed tracks: Speedway, Convict, Uptown, Withdrawal, Docks.
+       - Deploy **Edomondo NSX** exclusively on Technical / Twisty tracks: Meltdown, Sewage, Underdog, Industrial, Two Islands, Vector.
+       - Deploy **Colina Tanprice** exclusively on Dirt / Hybrid tracks: Mudpit, Hammerhead, Parkland.
+       - Re-gear **Echo R8** to eliminate the $-2$ Tarmac penalty (swap Rally Gearbox to Paddle Shift Long Ratio and Medium Coilovers to Adjustable Coilovers) to serve as a specialized Commerce / Stone Park balanced contender.
+  - **Date & Time**: 2026-10-13 09:50:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
 
