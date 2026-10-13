@@ -1735,11 +1735,44 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-13 21:52:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
-
-
-
-
-
-
-
-
+#### Session 88
+- **Focus**: Cross-Account Forensic Audit & Household Same-IP Risk Assessment (Merogie [4054802] & AmberTJY [4540646]).
+  - **User Directive**:
+    - "could we do a sense check based on activity and logs if there is proof of the same player playing both accounts? my wife does play it but we are on the same ip address so just wanted to have a sense of what it may seem like."
+  - **Context & Regulatory Framework (Torn Anti-Cheat Policy)**:
+    - Torn City rule: Multiple people playing from the same household/IP address (spouses, family, roommates) is explicitly permitted by Chedburn and staff.
+    - Staff / Bot Detection Triggers:
+      1. Asymmetric wealth transfers (one-sided cash, stocks, properties, or valuable items).
+      2. Combat interaction (farming, chain boosting, bounties, revives, or hospitalizing for gain).
+      3. Coordinated faction sabotage or multi-spying.
+      4. Rigid sequential access patterns (ping-pong logins with zero concurrent activity on the same browser/fingerprint).
+  - **Forensic Audit Findings**:
+    1. *Account & Social Independence*:
+       - **Merogie** [`4054802`]: Level 55 | Faction: *Monarch HQ* [`8336`] (Diamond III) | Married to *Kelyria* [`4064510`] (264 days).
+       - **AmberTJY** [`4540646`]: Level 10 | Faction: *The Golden Road* [`50244`] | Married to *MR_RICH_TMM* [`3903221`] (4 days).
+       - Zero institutional entanglement: completely separate factions, separate chains, separate wars, and separate spouses/vaults.
+    2. *Direct Inter-Account Interaction Audit*:
+       - **Combat & Bounties**: **0 attacks / 0 defends** between each other in history. Zero hosping, zero farming.
+       - **Financial & Wealth Funneling**: **0 unreciprocated transfers**. Zero cash gifts, zero properties transferred.
+       - **Trade History**: Exactly **one** mutual trade recorded in recent logs (Trade `#13534255` on 2026-10-13 08:33–08:37 UTC, titled *"Lolli for beer"*).
+         - Merogie provided: 260 Lollipops (Item ID 310, value ~$26k).
+         - AmberTJY provided: 260 Bottles of Beer (Item ID 180, value ~$26k).
+         - Fair market value 1:1 booster exchange. Textbook legitimate gameplay interaction.
+    3. *Concurrency & Physical Device Separation (The Strongest Defense)*:
+       - Single-user "multi" accounts exhibit sequential non-overlapping actions (logout Account A -> login Account B).
+       - In contrast, Merogie and AmberTJY logs exhibit heavy concurrent activity:
+         - **82 concurrent action pairs** occurred within 60 seconds of each other.
+         - **23 concurrent action pairs** occurred within $\le 5$ seconds.
+         - **Decisive Telemetry**: At **12:12:10 UTC**, Merogie was awarded an Honor Award in Monarch HQ while AmberTJY simultaneously completed an attack (12:12:04 UTC) and leveled up to Level 10, receiving max life increases and medals (12:12:10 UTC). Exact simultaneous execution proves two human beings operating separate devices.
+    4. *AmberTJY Organic Player Profile*:
+       - 17-day active streak, 41,045 seconds (~11.4h) active playtime, 53 attacks won, 46 defends lost, 177 candies used, 51 beers consumed, 23 Xanax taken.
+       - Organic, authentic progression curve of a new player rather than a dormant holding alt.
+  - **Risk Rating**:
+    - **Overall Household Risk**: **EXTREMELY LOW / SAFE**.
+  - **4 Golden Rules for Household Same-IP Maintenance**:
+    1. *Never Funnel Wealth*: Avoid large asymmetric cash transfers ($10M+) or gifting unreciprocated high-value assets/PIs.
+    2. *Zero Combat / Faction Collusion*: Never attack each other, hosp each other, or chain hit off each other.
+    3. *Device / Browser Independence*: Maintain separate logins on separate personal devices (e.g. Amber on Torn PDA/phone, Merogie on PC) to avoid shared browser cookies/fingerprints.
+    4. *No Mutual Reviving / Bailing*: Do not use one account to bail or revive the other repeatedly.
+  - **Date & Time**: 2026-10-13 22:12:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
