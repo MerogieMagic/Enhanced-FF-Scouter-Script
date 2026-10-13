@@ -21,6 +21,7 @@ Design a premier, high-fidelity, and fully responsive profile signature page for
 * **Residence**: Private Island
 * **Current Faction**: Monarch HQ [8336] (`|X|`, Diamond III, 18.3M+ Respect, Recruit)
 * **Employment**: Male Stripper at Dirty Dick's- [65963] (10★ Gentlemen's Club, Dir: MOJOMOFO [627688], Work Stats: 49,428)
+* **Associated / Spouse Account**: AmberTJY [`4540646`] (Level 10 Female, Faction ID: 50244, Full Access API Key: `TJn8SndJa8hRGsPl`)
 
 #### Operational Security (OPSEC) Rule
 * **CRITICAL**: **Never reveal raw Battle Stats (Strength, Speed, Defense, Dexterity) or stat totals/ratios.** Leaking battle stats allows enemies to calculate hit chance, damage, and plan mug/hospitalize hits.
@@ -1560,6 +1561,55 @@ Extracted directly via Torn API stock market endpoints:
        - Propose integrating an automatic Course-to-Car Advisor into `ff_scouter_bs_enhanced.user.js` on `sid=racing` to highlight the optimal vehicle in the car selection interface automatically.
   - **Date & Time**: 2026-10-13 13:20:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 82
+- **Focus**: In-Depth Audit of `tornpda-war-sorter-v9.1.user.js`, Root Cause Diagnosis of Low-Stat Loading Delay, and Modernization Plan.
+  - **User Directive**:
+    - User shared their current mobile Torn PDA script: `tornpda-war-sorter-v9.1.user.js` (by Tom Chew).
+    - Objective 1: Upgrade the script with features built into the PC version (`ff_scouter_bs_enhanced.user.js`).
+    - Objective 2: Host the script on GitHub with auto-updating headers (`@downloadURL` / `@updateURL`) so Torn PDA updates it automatically without manual copy-pasting.
+    - Objective 3: Diagnose and eliminate the major bug: *"takes a long time for the battle stats to load and show for lower stats but higher stats load faster"*.
+  - **Root Cause Diagnosis for Low-Stat Loading Delays**:
+    1. *Ascending Object Key Queue Bias*:
+       - In `enqueueStaleIds()`, player IDs are gathered using `Object.keys(memberData)`.
+       - In JavaScript, `Object.keys()` automatically orders numeric keys in ascending integer order (`1, 2, ... 100000, ... 4000000`).
+       - In Torn City, Player IDs are strictly chronological: low IDs (e.g., 50k to 1.5M) are older veteran accounts with high battle stats (titans/veterans); high IDs (e.g., 3.5M to 4.2M) are newer accounts with lower battle stats.
+       - Consequently, `ffQueue.splice(0, FF_BATCH_SIZE)` was prioritizing low player IDs (high stats) first, while higher player IDs (lower stats) were repeatedly pushed to the end of the queue or delayed across multiple 30s/60s polling cycles!
+    2. *Zero Persistent Caching (Volatile In-Memory Only)*:
+       - `tornpda-war-sorter-v9.1.user.js` stores stats strictly in an in-memory object (`memberData = {}`).
+       - Every time the user changes pages, tabs, or reloads inside Torn PDA's webview, the cache is completely wiped clean and has to re-request all targets from scratch over the network.
+       - In contrast, the PC version uses persistent `localStorage` / `GM_setValue` caching with a 1-hour TTL, rendering previously seen targets in 0 milliseconds!
+    3. *Slow Request Scheduling*:
+       - `fetchFFScores()` was only invoked after `updateFactionData()` completed (every 30 seconds), or on a rigid 60-second timer on profile/bounty pages, causing severe perceived lag when scanning active targets.
+  - **Modernization & Parity Strategy**:
+    1. *Persistent Storage Integration*: Implement persistent `localStorage` caching (`ff_pda_cache_*`) with TTL.
+    2. *Visible Target Prioritization & Queue Inversion*: Prioritize targets currently visible in the active DOM first, and order the remaining queue in reverse numeric order (highest Player IDs / lower stats first) to eliminate the low-stat bottleneck.
+    3. *GitHub Deployment & Update Engine*: Host as `tornpda_war_enhanced.user.js` on GitHub `main` with `@downloadURL` and `@updateURL` headers and a manual `Check for Updates` modal.
+    4. *Feature Upgrades from PC Version*:
+       - 7-tier calibrated combat threat colors (Sky Blue, Royal Blue, Light Green, Orange, Crimson Red, Slate Gray).
+       - Clickable hospital timers linking to direct attack screens.
+       - Fast 1-click player ID copy buttons (`[Player [12345]]`).
+       - Dual physical DOM reordering for guaranteed mobile roster sorting.
+       - Live DOM status parsing for peacetime/non-war faction lists.
+  - **Date & Time**: 2026-10-13 20:47:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 83
+- **Focus**: Verification & Integration of Secondary Full Access API Key (AmberTJY [4540646]).
+  - **User Directive**:
+    - User provided secondary full-access API key: `TJn8SndJa8hRGsPl` (belonging to spouse account AmberTJY).
+    - Permitted for reference, load balancing/dual-key polling, and account analytics/optimization.
+  - **Key Intelligence & Verification**:
+    - Account: **AmberTJY** [`4540646`]
+    - Level: `10` | Gender: Female | Faction ID: `50244`
+    - API Key Access Level: **Full Access** (Verified via Torn API v2 `/key/info`)
+    - Strategic Utility:
+      1. Dual-key rate-limit mitigation (adds +100 API calls/min pool for data-heavy war or market queries).
+      2. Available for family portfolio, education, financial, and stat training optimization.
+  - **Date & Time**: 2026-10-13 20:49:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
