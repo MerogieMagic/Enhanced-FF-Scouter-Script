@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.4
+// @version      9.5
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Tom Chew, rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @match        https://www.torn.com/*

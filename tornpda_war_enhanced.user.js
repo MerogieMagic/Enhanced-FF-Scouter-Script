@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.4
+// @version      9.5
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Tom Chew, rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @match        https://www.torn.com/*
@@ -27,7 +27,7 @@
     }
     window.__TORNPDA_WAR_ENHANCED_ACTIVE__ = true;
 
-    const SCRIPT_VERSION = 9.4;
+    const SCRIPT_VERSION = 9.5;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js";
     const SETTINGS_KEY = 'tornpda-war-sorter-settings-v9';
     const CACHE_PREFIX = 'tornpda_ff_cache_';
@@ -694,29 +694,24 @@
         if (m) {
             const act = (m.activity || (m.last_action && m.last_action.status) || '').toLowerCase();
             if (act === 'online') return 1;
-            if (act === 'idle') return 2;
-            if (act === 'offline') return 3;
+            if (act === 'idle' || act === 'offline') return 2;
         }
         if (li) {
             const svgUse = li.querySelector('svg use');
             const href = svgUse ? (svgUse.getAttribute('href') || svgUse.getAttribute('xlink:href') || '') : '';
             if (href.includes('icon1') || li.querySelector('[id*="icon1"], .online, [class*="online___"], [class*="online-icon"], [class*="userStatusOnline"], [class*="status-online"]')) return 1;
-            if (href.includes('icon2') || li.querySelector('[id*="icon2"], .idle, [class*="idle___"], [class*="idle-icon"], [class*="userStatusIdle"], [class*="status-idle"]')) return 2;
-            if (href.includes('icon3') || li.querySelector('[id*="icon3"], .offline, [class*="offline___"], [class*="offline-icon"], [class*="userStatusOffline"], [class*="status-offline"]')) return 3;
 
             if (li.querySelector('[title*="Online" i], [aria-label*="Online" i], [data-title*="Online" i]')) return 1;
-            if (li.querySelector('[title*="Idle" i], [aria-label*="Idle" i], [data-title*="Idle" i]')) return 2;
-            if (li.querySelector('[title*="Offline" i], [aria-label*="Offline" i], [data-title*="Offline" i]')) return 3;
 
-            // Fallback: check SVG / circle elements with green/orange fills
+            // Fallback: check SVG / circle elements with green fills (Torn green for online)
             const coloredEls = li.querySelectorAll('svg, circle, path, [class*="status"], [class*="icon"]');
             for (const el of coloredEls) {
                 const fill = (el.getAttribute('fill') || el.style.fill || el.style.color || '').toLowerCase();
                 if (fill.includes('#00a859') || fill.includes('#4caf50') || fill.includes('#22c55e') || fill.includes('#5cb85c') || fill.includes('rgb(0, 168, 89)')) return 1;
-                if (fill.includes('#f59e0b') || fill.includes('#f89406') || fill.includes('#e67e22') || fill.includes('#ff9800') || fill.includes('rgb(245, 158, 11)')) return 2;
             }
         }
-        return 3;
+        // Idle and Offline are treated as the same non-online tier
+        return 2;
     }
 
     function ensureHeaderColumn() {

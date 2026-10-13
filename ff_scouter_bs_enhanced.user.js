@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.98
+// @version      2.99
 // @author       rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.98;
+    const SCRIPT_VERSION = 2.99;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -1291,22 +1291,18 @@
         if (member?.last_action?.status) {
             const s = String(member.last_action.status).toLowerCase();
             if (s === 'online') return 1;
-            if (s === 'idle') return 2;
-            if (s === 'offline') return 3;
+            if (s === 'idle' || s === 'offline') return 2;
         }
         if (li) {
             const svgUse = li.querySelector('svg use');
             const href = svgUse ? (svgUse.getAttribute('href') || svgUse.getAttribute('xlink:href') || '') : '';
             if (href.includes('icon1') || li.querySelector('[id*="icon1"], .online, [class*="online___"]')) return 1;
-            if (href.includes('icon2') || li.querySelector('[id*="icon2"], .idle, [class*="idle___"]')) return 2;
-            if (href.includes('icon3') || li.querySelector('[id*="icon3"], .offline, [class*="offline___"]')) return 3;
 
             const iconWrap = li.querySelector('[title*="Online" i], [aria-label*="Online" i]');
             if (iconWrap) return 1;
-            const idleWrap = li.querySelector('[title*="Idle" i], [aria-label*="Idle" i]');
-            if (idleWrap) return 2;
         }
-        return 3;
+        // Idle and Offline are treated as the same non-online tier
+        return 2;
     }
 
     function updateMemberStatusDecoration(li, member) {
@@ -1711,8 +1707,7 @@
                 // Smart War Sorting:
                 // Available targets (classRank <= 1, i.e., Okay / Unexpected Okay):
                 // - Online targets first (onlineTier = 1), sorted by Battle Stats ascending
-                // - Idle targets second (onlineTier = 2), sorted by Battle Stats ascending
-                // - Offline targets third (onlineTier = 3), sorted by Battle Stats ascending
+                // - Idle & Offline targets merged (onlineTier = 2), sorted by Battle Stats ascending
                 // Followed by:
                 // 2: In Hospital (Sorted ascending: least hospital time remaining first!)
                 // 3: Incoming flight (landing soonest first)

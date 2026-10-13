@@ -1712,6 +1712,30 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-13 21:36:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 87
+- **Focus**: Unified Idle & Offline Target Merging for PC (`v2.99`) and Torn PDA (`v9.5`).
+  - **User Directive**:
+    - "idle and offline need not be sorted differently, this applies to both pc and tornpda".
+  - **Architectural Overhaul & Implementation**:
+    1. *Merged Non-Online Tier (Tier 2)*:
+       - In both PC (`ff_scouter_bs_enhanced.user.js`) and mobile (`tornpda_war_enhanced.user.js`), updated `getMemberOnlineTier`:
+         - Returns `1` for **Online** targets.
+         - Returns `2` for **Idle** and **Offline** targets (merged into the same tier).
+    2. *Smart War Sorting Order*:
+       - **Tier 1 (Online Okay targets)**: Displayed at the very top, sorted ascending by Battle Stats (lowest BS first).
+       - **Tier 2 (Idle + Offline Okay targets)**: Grouped together in a single pool, sorted strictly ascending by Battle Stats (lowest BS first). Low-stat offline targets are no longer demoted below higher-stat idle targets.
+       - **Tier 3 (Hospitalized targets)**: Sorted ascending by least hospital time remaining.
+    3. *Version Bumps & Meta Update*:
+       - PC Userscript bumped to **v2.99**.
+       - Mobile Torn PDA Userscript bumped to **v9.5** (along with `tornpda_war_enhanced.meta.js`).
+       - `README.md` updated to document merged Idle/Offline sorting across both platforms.
+  - **Verification & Deployment**:
+    - Validated syntax using `node --check` across `ff_scouter_bs_enhanced.user.js`, `tornpda_war_enhanced.user.js`, and `tornpda_war_enhanced.meta.js` (all exit code 0).
+    - Pushed commit to GitHub repository (`Enhanced-FF-Scouter-Script`) on `main` branch.
+  - **Date & Time**: 2026-10-13 21:52:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 

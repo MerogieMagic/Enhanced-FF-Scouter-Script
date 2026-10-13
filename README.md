@@ -10,11 +10,11 @@ An all-in-one userscript for [Torn City](https://www.torn.com) combining real-ti
 1. Install [Violentmonkey](https://violentmonkey.github.io/) or [Tampermonkey](https://www.tampermonkey.net/).
 2. Click the installation link below:
    
-   👉 **[Click Here to Install PC Script (v2.98)](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js)** 👈
+   👉 **[Click Here to Install PC Script (v2.99)](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js)** 👈
 
 ---
 
-### 📱 Option 2: Mobile (Torn PDA App - v9.4)
+### 📱 Option 2: Mobile (Torn PDA App - v9.5)
 Tailored to Torn PDA's native script specifications (`###PDA-APIKEY###` auto-auth, War Mode compatibility, re-injection guards, 3-s.f. stats, onlines-first smart sorting, under-name badge alignment):
 1. In Torn PDA, navigate to **Settings** $\rightarrow$ **Advanced** $\rightarrow$ **User Scripts** (or your Scripts manager).
 2. Tap **Add Script / Link** and paste the following direct URL:
@@ -34,7 +34,7 @@ Tailored to Torn PDA's native script specifications (`###PDA-APIKEY###` auto-aut
 - **⚔️ Smart War & Hospital Sorting**:
   - Automatically prioritizes available targets at the top.
   - **Online** available targets sorted to the very top (lowest BS first).
-  - **Idle** and **Offline** available targets follow in sequence.
+  - **Idle and Offline** available targets follow merged together (sorted purely by lowest BS first).
   - Hospitalized targets sorted ascending by least hospital time remaining.
 - **⏱️ Live Hospital Countdown Badges**:
   - Live ticking countdown badges directly in faction member rosters.
