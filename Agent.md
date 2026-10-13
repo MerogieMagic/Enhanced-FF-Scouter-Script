@@ -1796,3 +1796,28 @@ Extracted directly via Torn API stock market endpoints:
        - Validated JS syntax across all userscripts using `node --check` (exit code 0).
   - **Date & Time**: 2026-10-13 22:19:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 90
+- **Focus**: City Shop Restock Alerting Research & Architecture Planning (Beer, Blood Bags, Lollipops).
+  - **User Directive**:
+    - "can we make a separate script for alerting when beer in bits and bob, bloodbags in pharmacy or lollipops in sweet shop in torn is restocked"
+  - **Torn City Shop & API Discovery**:
+    1. *Torn API Endpoint Verified*:
+       - Querying `https://api.torn.com/torn/?selections=cityshops&key=...` returns complete live stock across all city shops.
+    2. *Target Shop & Item Identifiers*:
+       - **Bits 'n' Bobs** (Shop ID `103`):
+         - Target: **Bottle of Beer** (Item ID `180`, buy price $10, market value ~$936).
+         - Current status: Out of stock (0 units). Item ID 180 appears in inventory when restocked.
+       - **Pharmacy** (Shop ID `110`):
+         - Target: **Empty Blood Bag** (Item ID `731`, buy price $15,000, market value ~$16,331).
+         - Restocks in batches of 1,000 units.
+       - **Sally's Sweet Shop** (Shop ID `101`):
+         - Target: **Lollipop** (Item ID `310`, buy price $25, market value ~$1,007).
+         - Restocks in batches of 1,000 units.
+    3. *Restock Dynamics & API Efficiency*:
+       - City shops typically restock on 15-minute intervals (around :00, :15, :30, :45) or randomized tick intervals.
+       - Querying `cityshops` requires a Public / Limited API key and consumes 1 API call per fetch, allowing low-overhead polling (e.g. 1 call every 30s, or smart bursts around :00/:15/:30/:45).
+  - **Collaborative Requirement Clarification**:
+    - Consulted user regarding preferred platform (Browser Userscript vs. Standalone Python CLI / Background Daemon vs. Both), alert channels (audio chime, browser notification, in-game HUD bar), and auto-navigation behavior.
+  - **Date & Time**: 2026-10-13 22:25:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
