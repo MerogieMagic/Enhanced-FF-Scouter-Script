@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.2
+// @version      9.3
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Tom Chew, rDacted, Weav3r, xentac - modded by GFOUR & Antigravity
 // @match        https://www.torn.com/*
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = 9.2;
+    const SCRIPT_VERSION = 9.3;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js";
     const SETTINGS_KEY = 'tornpda-war-sorter-settings-v9';
     const CACHE_PREFIX = 'tornpda_ff_cache_';
@@ -78,23 +78,51 @@
             border-color: #ef4444;
         }
 
-        /* Battle-stats badge anchored directly under/beside player name */
+        /* Vertical container holding Honor Bar on top and Battle Stats badge directly underneath */
+        .tornpda-name-col-wrap {
+            display: inline-flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            vertical-align: middle !important;
+            margin: 0 4px !important;
+            max-width: 145px !important;
+            min-width: 105px !important;
+            line-height: 1.15 !important;
+            flex-shrink: 0 !important;
+        }
+
+        /* Battle-stats badge placed directly under the player's honor bar / name */
         .tornpda-stats-badge {
             position: static !important;
             display: inline-block !important;
-            width: fit-content;
-            max-width: 95%;
-            margin: 1px 4px 0 0;
-            font-size: 10px;
-            font-weight: 800;
-            line-height: 1.3;
-            padding: 1px 5px;
-            border-radius: 3px;
-            text-align: center;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-            letter-spacing: 0.2px;
-            box-sizing: border-box;
-            vertical-align: middle;
+            width: fit-content !important;
+            max-width: 95% !important;
+            margin: 2px auto 0 auto !important;
+            font-size: 9.5px !important;
+            font-weight: 800 !important;
+            line-height: 1.2 !important;
+            padding: 1px 6px !important;
+            border-radius: 3px !important;
+            text-align: center !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8) !important;
+            letter-spacing: 0.3px !important;
+            box-sizing: border-box !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        /* Dedicated Column mode styling */
+        .tornpda-bs-col-cell, .tornpda-bs-header-cell {
+            width: 60px !important;
+            min-width: 50px !important;
+            max-width: 75px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            box-sizing: border-box !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
         }
 
         /* 1-Click Fast Copy Button */
@@ -331,10 +359,32 @@
         if (typeof num !== 'number' || isNaN(num) || num <= 0) {
             return typeof value === 'string' ? value : null;
         }
-        if (num >= 1e12) return (num / 1e12).toFixed(2) + 't';
-        if (num >= 1e9) return (num / 1e9).toFixed(2) + 'b';
-        if (num >= 1e6) return (num / 1e6).toFixed(2) + 'm';
-        if (num >= 1e3) return (num / 1e3).toFixed(1) + 'k';
+
+        // Strictly round to 3 significant figures across all tiers
+        if (num >= 1e12) {
+            const v = num / 1e12;
+            if (v >= 100) return Math.round(v) + 't';
+            if (v >= 10) return v.toFixed(1) + 't';
+            return v.toFixed(2) + 't';
+        }
+        if (num >= 1e9) {
+            const v = num / 1e9;
+            if (v >= 100) return Math.round(v) + 'b';
+            if (v >= 10) return v.toFixed(1) + 'b';
+            return v.toFixed(2) + 'b';
+        }
+        if (num >= 1e6) {
+            const v = num / 1e6;
+            if (v >= 100) return Math.round(v) + 'm';
+            if (v >= 10) return v.toFixed(1) + 'm';
+            return v.toFixed(2) + 'm';
+        }
+        if (num >= 1e3) {
+            const v = num / 1e3;
+            if (v >= 100) return Math.round(v) + 'k';
+            if (v >= 10) return v.toFixed(1) + 'k';
+            return v.toFixed(2) + 'k';
+        }
         return Math.round(num).toString();
     }
 
@@ -380,16 +430,17 @@
     };
 
     const SORT_FIELDS = [
-        ['none', 'Default Torn'],
-        ['war_smart', '⚔️ Hosp / War Smart'],
+        ['war_smart', '⚔️ Hosp / War Smart (Onlines First)'],
         ['stats_asc', '▲ Lowest BS'],
         ['stats_desc', '▼ Highest BS'],
         ['time', '⏱️ Time Remaining'],
-        ['level', 'Level']
+        ['level', 'Level'],
+        ['none', 'Default Torn']
     ];
 
     const DEFAULT_SETTINGS = {
         sort: { primaryField: 'war_smart', primaryDir: 'asc' },
+        badgePos: 'under_name', // 'under_name' | 'col' | 'inline'
         activityFilter: { online: true, idle: true, offline: true },
         statusFilter: { okay: true, hospital: true, jail: true, traveling: true, abroad: true }
     };
@@ -401,6 +452,7 @@
             const parsed = JSON.parse(raw);
             return {
                 sort: Object.assign({}, DEFAULT_SETTINGS.sort, parsed.sort),
+                badgePos: parsed.badgePos || DEFAULT_SETTINGS.badgePos,
                 activityFilter: Object.assign({}, DEFAULT_SETTINGS.activityFilter, parsed.activityFilter),
                 statusFilter: Object.assign({}, DEFAULT_SETTINGS.statusFilter, parsed.statusFilter)
             };
@@ -608,17 +660,98 @@
         return statusBox;
     }
 
+    function getMemberOnlineTier(li, m) {
+        if (m) {
+            const act = (m.activity || (m.last_action && m.last_action.status) || '').toLowerCase();
+            if (act === 'online') return 1;
+            if (act === 'idle') return 2;
+            if (act === 'offline') return 3;
+        }
+        if (li) {
+            const svgUse = li.querySelector('svg use');
+            const href = svgUse ? (svgUse.getAttribute('href') || svgUse.getAttribute('xlink:href') || '') : '';
+            if (href.includes('icon1') || li.querySelector('[id*="icon1"], .online, [class*="online___"], [class*="online-icon"], [class*="userStatusOnline"], [class*="status-online"]')) return 1;
+            if (href.includes('icon2') || li.querySelector('[id*="icon2"], .idle, [class*="idle___"], [class*="idle-icon"], [class*="userStatusIdle"], [class*="status-idle"]')) return 2;
+            if (href.includes('icon3') || li.querySelector('[id*="icon3"], .offline, [class*="offline___"], [class*="offline-icon"], [class*="userStatusOffline"], [class*="status-offline"]')) return 3;
+
+            if (li.querySelector('[title*="Online" i], [aria-label*="Online" i], [data-title*="Online" i]')) return 1;
+            if (li.querySelector('[title*="Idle" i], [aria-label*="Idle" i], [data-title*="Idle" i]')) return 2;
+            if (li.querySelector('[title*="Offline" i], [aria-label*="Offline" i], [data-title*="Offline" i]')) return 3;
+
+            // Fallback: check SVG / circle elements with green/orange fills
+            const coloredEls = li.querySelectorAll('svg, circle, path, [class*="status"], [class*="icon"]');
+            for (const el of coloredEls) {
+                const fill = (el.getAttribute('fill') || el.style.fill || el.style.color || '').toLowerCase();
+                if (fill.includes('#00a859') || fill.includes('#4caf50') || fill.includes('#22c55e') || fill.includes('#5cb85c') || fill.includes('rgb(0, 168, 89)')) return 1;
+                if (fill.includes('#f59e0b') || fill.includes('#f89406') || fill.includes('#e67e22') || fill.includes('#ff9800') || fill.includes('rgb(245, 158, 11)')) return 2;
+            }
+        }
+        return 3;
+    }
+
+    function ensureHeaderColumn() {
+        const headers = document.querySelectorAll('ul.table-header, .members-list-header, .members-header, .table-row.table-header');
+        headers.forEach(header => {
+            let colHead = header.querySelector('.tornpda-bs-header-cell');
+            if (settings.badgePos === 'col') {
+                if (!colHead) {
+                    colHead = document.createElement('li');
+                    colHead.className = 'tornpda-bs-header-cell';
+                    colHead.textContent = 'Est. BS';
+                    const lvlHead = header.querySelector('.lvl, [class*="lvl___"], .level');
+                    if (lvlHead) header.insertBefore(colHead, lvlHead);
+                    else header.appendChild(colHead);
+                }
+            } else if (colHead) {
+                colHead.remove();
+            }
+        });
+    }
+
     function getStatsBadge(li) {
         let badge = li.querySelector('.tornpda-stats-badge');
         if (badge) return badge;
-        const memberCell = li.querySelector('.member');
-        if (!memberCell) return null;
+
         badge = document.createElement('span');
         badge.className = 'tornpda-stats-badge';
+
+        const pos = settings.badgePos || 'under_name';
+        const memberCell = li.querySelector('.member') || li.querySelector('[class*="member___"]') || li;
         const nameLink = memberCell.querySelector('a[href*="XID="]');
+
+        if (pos === 'col') {
+            let colCell = li.querySelector('.tornpda-bs-col-cell');
+            if (!colCell) {
+                colCell = document.createElement('div');
+                colCell.className = 'tornpda-bs-col-cell';
+                const lvlCell = li.querySelector('.lvl, [class*="lvl___"], .level');
+                if (lvlCell) {
+                    li.insertBefore(colCell, lvlCell);
+                } else if (memberCell && memberCell.nextSibling) {
+                    li.insertBefore(colCell, memberCell.nextSibling);
+                } else {
+                    li.appendChild(colCell);
+                }
+            }
+            colCell.appendChild(badge);
+            return badge;
+        }
+
+        if (pos === 'under_name' && nameLink && nameLink.parentNode) {
+            let wrap = nameLink.closest('.tornpda-name-col-wrap');
+            if (!wrap) {
+                wrap = document.createElement('div');
+                wrap.className = 'tornpda-name-col-wrap';
+                nameLink.parentNode.insertBefore(wrap, nameLink);
+                wrap.appendChild(nameLink);
+            }
+            wrap.appendChild(badge);
+            return badge;
+        }
+
         if (nameLink && nameLink.parentNode) {
             nameLink.parentNode.insertBefore(badge, nameLink.nextSibling);
-        } else {
+        } else if (memberCell) {
             memberCell.appendChild(badge);
         }
         return badge;
@@ -692,6 +825,7 @@
 
     // --- 10. UNIFIED SORTING & FILTERING ---
     function sortAndFilterRoster() {
+        ensureHeaderColumn();
         const lists = document.querySelectorAll('ul.members-list, ul.member-list, .table-body');
         const now = Date.now() / 1000;
 
@@ -743,6 +877,12 @@
                     }
                 }
 
+                // Classification for smart war sorting
+                const liveStatusTxt = (statusBox ? statusBox.textContent : (li.querySelector('.status, .table-cell.status')?.textContent || '')).trim().toLowerCase();
+                const isOkay = (m.state === "Okay") || liveStatusTxt.includes('okay');
+                const isHosp = (m.state === "Hospital") || liveStatusTxt.includes('hosp') || liveStatusTxt.includes('🏥') || liveStatusTxt.includes(':');
+                const onlineTier = getMemberOnlineTier(li, m);
+
                 // Filtering visibility
                 const statusKey = (m.state || '').toLowerCase();
                 const statusOk = !statusKey || settings.statusFilter[statusKey] !== false;
@@ -752,7 +892,7 @@
                 if (visible) li.classList.remove('tornpda-hide');
                 else li.classList.add('tornpda-hide');
 
-                entries.push({ li, m, playerId, idx });
+                entries.push({ li, m, playerId, idx, isOkay, isHosp, onlineTier });
             });
 
             // Queue visible IDs for immediate prioritized fetching
@@ -768,21 +908,31 @@
                     const bBs = b.m.bsEstimate || parseBsStringToNumber(b.m.bsEstimateHuman);
 
                     if (sortMode === 'war_smart') {
-                        const aOkay = a.m.state === 'Okay';
-                        const bOkay = b.m.state === 'Okay';
-                        if (aOkay && bOkay) {
+                        const aIsOkay = a.isOkay;
+                        const bIsOkay = b.isOkay;
+
+                        if (aIsOkay && bIsOkay) {
+                            // 1. Online Targets FIRST (Tier 1: Online < Tier 2: Idle < Tier 3: Offline)
+                            if (a.onlineTier !== b.onlineTier) {
+                                return a.onlineTier - b.onlineTier;
+                            }
+                            // 2. Within same online tier, sort by Battle Stats ascending (lowest BS first)
                             if (aBs !== null && bBs !== null) return aBs - bBs;
-                            return (aBs !== null ? -1 : (bBs !== null ? 1 : a.idx - b.idx));
+                            if (aBs !== null && bBs === null) return -1;
+                            if (aBs === null && bBs !== null) return 1;
+                            return a.idx - b.idx;
                         }
-                        if (aOkay && !bOkay) return -1;
-                        if (!aOkay && bOkay) return 1;
+
+                        // Available targets always stay on top
+                        if (aIsOkay && !bIsOkay) return -1;
+                        if (!aIsOkay && bIsOkay) return 1;
 
                         // Non-available targets: Hospital first (least time remaining)
-                        const aHosp = a.m.state === 'Hospital';
-                        const bHosp = b.m.state === 'Hospital';
-                        if (aHosp && bHosp) return (a.m.until || 0) - (b.m.until || 0);
-                        if (aHosp && !bHosp) return -1;
-                        if (!aHosp && bHosp) return 1;
+                        if (a.isHosp && b.isHosp) {
+                            return (a.m.until || 0) - (b.m.until || 0);
+                        }
+                        if (a.isHosp && !b.isHosp) return -1;
+                        if (!a.isHosp && b.isHosp) return 1;
 
                         return a.idx - b.idx;
                     } else if (sortMode === 'stats_asc') {
@@ -897,6 +1047,12 @@
             <select id="tornpda-sort-select">
                 ${SORT_FIELDS.map(([val, label]) => `<option value="${val}" ${settings.sort.primaryField === val ? 'selected' : ''}>${label}</option>`).join('')}
             </select>
+            <div class="tornpda-panel-label">Stats Badge Placement</div>
+            <select id="tornpda-badge-pos-select">
+                <option value="under_name" ${settings.badgePos === 'under_name' ? 'selected' : ''}>Directly Under Name (Recommended)</option>
+                <option value="col" ${settings.badgePos === 'col' ? 'selected' : ''}>Dedicated Column</option>
+                <option value="inline" ${settings.badgePos === 'inline' ? 'selected' : ''}>Inline Beside Name</option>
+            </select>
             <div class="tornpda-panel-label">Activity Filter</div>
             <label><input type="checkbox" data-group="activity" data-key="online" ${settings.activityFilter.online ? 'checked' : ''}> Online</label>
             <label><input type="checkbox" data-group="activity" data-key="idle" ${settings.activityFilter.idle ? 'checked' : ''}> Idle</label>
@@ -932,6 +1088,21 @@
             saveSettings();
             sortAndFilterRoster();
         };
+
+        const posSelect = panel.querySelector('#tornpda-badge-pos-select');
+        if (posSelect) {
+            posSelect.onchange = (e) => {
+                settings.badgePos = e.target.value;
+                saveSettings();
+                document.querySelectorAll('.tornpda-stats-badge, .tornpda-bs-col-cell, .tornpda-bs-header-cell').forEach(el => el.remove());
+                document.querySelectorAll('.tornpda-name-col-wrap').forEach(wrap => {
+                    const parent = wrap.parentNode;
+                    while (wrap.firstChild) parent.insertBefore(wrap.firstChild, wrap);
+                    wrap.remove();
+                });
+                sortAndFilterRoster();
+            };
+        }
 
         panel.querySelectorAll('input[type=checkbox]').forEach(cb => {
             cb.onchange = (e) => {

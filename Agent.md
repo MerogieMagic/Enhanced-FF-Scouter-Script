@@ -1647,6 +1647,43 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-13 20:52:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 85
+- **Focus**: Delivery of `tornpda_war_enhanced.user.js` (v9.3) — 3 Significant Figures Formatting, Directly Under Name Badge Placement & Onlines-First Smart War Sorting.
+  - **User Directive**:
+    - The battle stats position was jammed next to the Level column; requested placing it directly under the name or creating its own column.
+    - Battle stats were not rounded to 3 significant figures (e.g., `290.5k`, `14.08m`, `19.10m` showed 4 s.f.).
+    - Smart war sort was not placing online players at the top (e.g. online player Limaoscarli... with 5.22M was at row 12 under offline players).
+  - **Architectural Overhaul & Engineering Details**:
+    1. *Strict 3 Significant Figures Formatting (`formatBattleStats`)*:
+       - Implemented exact mathematical 3-s.f. tiers across trillions, billions, millions, and thousands:
+         - Value $\ge 100$: `Math.round(val) + unit` (e.g. `290.5k` $\to$ `291k`, `498.0k` $\to$ `498k`, `125.4m` $\to$ `125m`, `500b`).
+         - Value $10 \le \text{val} < 100$: `val.toFixed(1) + unit` (e.g. `14.08m` $\to$ `14.1m`, `19.10m` $\to$ `19.1m`, `84.5m`).
+         - Value $1 \le \text{val} < 10$: `val.toFixed(2) + unit` (e.g. `1.10m`, `1.34m`, `2.48b`).
+       - Validated all test cases from the user's screenshot via Node.js scratch test (`test_3sf.js`).
+    2. *Directly Under Name Badge Placement (`.tornpda-name-col-wrap`)*:
+       - Created vertical flex container wrapping player honor bar / name and `.tornpda-stats-badge`.
+       - Places player name on the top row, and the color threat badge centered directly underneath.
+       - Eliminates horizontal squeeze into the `Level` column and preserves standard mobile column widths with 0 horizontal scrolling.
+       - Added `Stats Badge Placement` selector (`under_name`, `col`, `inline`) inside the floating `⚙️` settings panel with live DOM re-render.
+    3. *Onlines-First Smart War Sorting*:
+       - Built `getMemberOnlineTier(li, m)` detecting online status across:
+         - API `activity` and `last_action.status`.
+         - SVG icon hrefs (`#icon1` online, `#icon2` idle, `#icon3` offline).
+         - SVG / circle fill colors (`#00a859` / `#4caf50` online, `#f59e0b` idle).
+         - DOM class names (`.online`, `.idle`, `.offline`) and title / aria labels.
+       - Overhauled `war_smart` comparator:
+         - Available (`Okay`) targets are strictly sorted: **Online (Tier 1)** $\to$ **Idle (Tier 2)** $\to$ **Offline (Tier 3)**.
+         - Within each online tier, candidates are sorted ascending by Battle Stats (lowest BS first).
+         - Hospitalized targets follow, sorted ascending by least time remaining.
+         - Verified with user's scenario: Online players like Limaoscarli... (5.22M) now jump straight to the **#1 spot** at the very top of the war roster.
+  - **Verification & Deployment**:
+    - Validated syntax with `node --check tornpda_war_enhanced.user.js` (exit code 0).
+    - Updated `README.md` with v9.3 highlights.
+    - Pushed to GitHub repository (`Enhanced-FF-Scouter-Script`) on `main` branch.
+  - **Date & Time**: 2026-10-13 21:20:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 

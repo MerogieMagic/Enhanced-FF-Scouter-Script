@@ -14,8 +14,8 @@ An all-in-one userscript for [Torn City](https://www.torn.com) combining real-ti
 
 ---
 
-### 📱 Option 2: Mobile (Torn PDA App)
-Designed specifically for mobile performance in Torn PDA (zero lag, persistent caching, 7-tier threat badges, smart sorting):
+### 📱 Option 2: Mobile (Torn PDA App - v9.3)
+Designed specifically for mobile performance in Torn PDA (zero lag, 3-s.f. battle stats, onlines-first smart war sorting, under-name badge alignment or dedicated column, 7-tier threat badges):
 1. In Torn PDA, navigate to **Settings** $\rightarrow$ **Advanced** $\rightarrow$ **User Scripts** (or your Scripts manager).
 2. Tap **Add Script / Link** and paste the following direct URL:
 
