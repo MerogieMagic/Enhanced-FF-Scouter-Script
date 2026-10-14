@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      2.99
+// @version      3.00
 // @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = 2.99;
+    const SCRIPT_VERSION = "3.00";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -1279,8 +1279,13 @@
             return { rank: 5, delta: 10000, label: 'Outgoing' };
         }
 
+        // In Jail / Fedded / Fallen / Inactive (lowest priority - cannot attack)
+        if (domLower.includes('jail') || domLower.includes('federal') || domLower.includes('fallen')) {
+            return { rank: 7, delta: 999999, label: 'Other' };
+        }
+
         // Abroad / Foreign country badge
-        if (domTxt.length > 0 && !domLower.includes('jail') && !domLower.includes('federal')) {
+        if (domTxt.length > 0) {
             return { rank: 4, delta: 999999, label: 'Abroad' };
         }
 
@@ -1296,10 +1301,14 @@
         if (li) {
             const svgUse = li.querySelector('svg use');
             const href = svgUse ? (svgUse.getAttribute('href') || svgUse.getAttribute('xlink:href') || '') : '';
-            if (href.includes('icon1') || li.querySelector('[id*="icon1"], .online, [class*="online___"]')) return 1;
+            if (href.includes('icon1') || href.toLowerCase().includes('online') || li.querySelector('[id*="icon1"], .online, [class*="online___"], [class*="userStatusOnline"], [class*="userOnlineStatusIcon"], [fill*="userStatusOnline"], [fill*="Online"]')) return 1;
 
             const iconWrap = li.querySelector('[title*="Online" i], [aria-label*="Online" i]');
             if (iconWrap) return 1;
+
+            // React 19 SVG gradient/fill fallback
+            const html = li.innerHTML;
+            if (html.includes('userStatusOnline') || html.includes('svg-user-status-online') || html.includes('userOnlineStatusIcon')) return 1;
         }
         // Idle and Offline are treated as the same non-online tier
         return 2;
@@ -1604,6 +1613,11 @@
 
     function sortMembersList(listElement, mode) {
         if (!listElement || isSortingList) return;
+
+        // If listElement is an outer container wrapping an inner table-body, redirect to the actual row container
+        const innerBody = listElement.querySelector('ul.table-body, .table-body, [class*="tableBody"]');
+        if (innerBody) listElement = innerBody;
+
         isSortingList = true;
 
         try {
@@ -1611,7 +1625,7 @@
             listElement.dataset.ffSortMode = mode;
 
             // Target player rows specifically, filtering out headers and extraneous divs
-            let items = Array.from(listElement.querySelectorAll(':scope > li, :scope > div.table-row, :scope > [class*="tableRow"]')).filter(el => {
+            let items = Array.from(listElement.querySelectorAll(':scope > li, :scope > div.table-row, :scope > [class*="tableRow"], :scope > [class*="table-row"]')).filter(el => {
                 if (el.classList.contains('table-header') || el.classList.contains('members-list-header') || el.querySelector('.table-header')) return false;
                 return !!(get_player_id_in_element(el) || el.querySelector('.member, [class*="member"], a[href*="profiles.php?XID="]'));
             });
@@ -1792,6 +1806,10 @@
     function setupWarSortBar(container, listElement) {
         if (!container || !listElement) return;
 
+        // Ensure listElement is the true row container, not an outer wrapper
+        const innerBody = listElement.querySelector('ul.table-body, .table-body, [class*="tableBody"]');
+        if (innerBody) listElement = innerBody;
+
         let toolbar = container.querySelector('.ff-war-sort-toolbar');
         const tableHeader = container.querySelector('.table-header, [class*="tableHeader___"], [class*="tableHeader"], .members-list-header');
 
@@ -1801,7 +1819,7 @@
 
             toolbar.innerHTML = `
                 <span class="ff-sort-title">⚔️ War Sort:</span>
-                <button type="button" class="ff-sort-btn ff-sort-war active" data-mode="war_hosp" title="Smart War Sort: Okay -> Soonest out of Hospital -> Incoming -> Abroad -> Outgoing">⏱️ Hosp / War</button>
+                <button type="button" class="ff-sort-btn ff-sort-war" data-mode="war_hosp" title="Smart War Sort: Okay -> Soonest out of Hospital -> Incoming -> Abroad -> Outgoing">⏱️ Hosp / War</button>
                 <button type="button" class="ff-sort-btn ff-sort-asc" data-mode="bs_asc" title="Sort Lowest Battle Stats first (Easiest targets on top)">▲ Lowest BS</button>
                 <button type="button" class="ff-sort-btn ff-sort-desc" data-mode="bs_desc" title="Sort Highest Battle Stats first (Titans on top)">▼ Highest BS</button>
                 <button type="button" class="ff-sort-btn ff-sort-reset" data-mode="default" title="Reset to default Torn order">↺ Default</button>
@@ -1840,6 +1858,8 @@
             if (rD_getValue('auto_war_sort', 'true') === 'true' && isWarPage) {
                 setActiveButton('war_hosp');
                 sortMembersList(listElement, 'war_hosp');
+            } else if (listElement.dataset.ffSortMode) {
+                setActiveButton(listElement.dataset.ffSortMode);
             }
         } else {
             // Re-anchor toolbar before tableHeader if React moved or recreated tableHeader
@@ -1881,6 +1901,10 @@
             '.members-list, ul.table-body, [class*="membersList___"], [class*="membersList"], [class*="tableBody"]'
         );
         memberLists.forEach(listElement => {
+            // If this element contains an inner table-body, skip this outer wrapper so setupWarSortBar binds directly to the inner table-body
+            if (listElement.querySelector('ul.table-body, .table-body, [class*="tableBody"]')) {
+                return;
+            }
             const container = listElement.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .faction-profile, [class*="factionProfile"], .factions-wrap, [class*="factionsWrap"]') || listElement.parentElement;
             if (container && listElement) {
                 setupWarSortBar(container, listElement);
@@ -1900,9 +1924,10 @@
 
     // --- Member List Dedicated Est. BS Column ---
     function updateFactionMemberTableBS() {
-        // STRICT SCOPE: Only execute on Faction Profile rosters (step=profile).
+        // STRICT SCOPE: Execute on all Faction rosters (step=profile, step=your, #faction-info).
         // NEVER execute on Ranked War or War Views, which have their own native Score columns.
-        if (!window.location.href.includes("step=profile")) return;
+        if (!window.location.href.includes("factions.php")) return;
+        if (document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"]')) return;
 
         // 1. Purge stray non-row estimate lines (Ironclad protection for all player rows)
         $(".table-body > li:not(.table-row), .table-body > div:not(.table-row), .table-body [class*='estimate']:not(.ff-scouter-bs-badge):not(.ff-bs-col), .members-list [class*='estimate']:not(.ff-scouter-bs-badge):not(.ff-bs-col)").each(function() {
@@ -1963,8 +1988,10 @@
                         e.stopPropagation();
                         // Find matching list/body for THIS specific header's container
                         const parentContainer = headerContainer.closest('.enemy-faction, .your-faction, [class*="enemyFaction"], [class*="yourFaction"], [class*="opponentFaction"], [class*="currentFaction"], .faction-info-wrap, .faction-members, .factions-members, .faction-war-view, .faction-profile, [class*="factionProfile"], .factions-wrap, [class*="factionsWrap"]') || headerContainer.parentElement;
-                        const tableBody = parentContainer ? parentContainer.querySelector('.table-body, .members-list, [class*="tableBody"], [class*="membersList"]') : document.querySelector('.table-body, .members-list, [class*="tableBody"], [class*="membersList"]');
+                        let tableBody = parentContainer ? parentContainer.querySelector('.table-body, .members-list, [class*="tableBody"], [class*="membersList"]') : document.querySelector('.table-body, .members-list, [class*="tableBody"], [class*="membersList"]');
                         if (!tableBody) return;
+                        const innerBody = tableBody.querySelector('ul.table-body, .table-body, [class*="tableBody"]');
+                        if (innerBody) tableBody = innerBody;
                         const currentDir = tableBody.dataset.ffSortMode || 'default';
                         let nextDir = 'bs_asc';
                         if (currentDir === 'default') nextDir = 'bs_asc';
@@ -2112,7 +2139,7 @@
                 }
             }
         }
-        if (window.location.href.includes("factions.php") && window.location.href.includes("step=profile")) {
+        if (window.location.href.includes("factions.php")) {
             updateFactionMemberTableBS();
         }
         refreshActiveSorts();
@@ -2667,9 +2694,7 @@
         }
 
         if (window.location.href.includes("factions.php")) {
-            if (window.location.href.includes("step=profile")) {
-                updateFactionMemberTableBS();
-            }
+            updateFactionMemberTableBS();
             ensureWarSortBars();
         }
     });
@@ -2684,9 +2709,7 @@
         setInterval(refreshFactionStatusData, API_INTERVAL);
         setTimeout(refreshFactionStatusData, 1000); // Initial run after load
         setInterval(() => {
-            if (window.location.href.includes("step=profile")) {
-                updateFactionMemberTableBS();
-            }
+            updateFactionMemberTableBS();
             ensureWarSortBars();
         }, 400);
     }

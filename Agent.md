@@ -1882,3 +1882,45 @@ Extracted directly via Torn API stock market endpoints:
        - Entire restock tracking backend and userscript polling are fully disabled and stopped.
   - **Date & Time**: 2026-10-13 23:18:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+#### Session 93
+- **Focus**: Faction Info Member List War Sorter & Est. BS Column Fix (`v3.00`).
+  - **User Directive**:
+    - "The war filter options in the info page doesnt really work for the member list, i shared the page source if it helps."
+  - **Root Cause Diagnosis**:
+    1. *Container Misdirection Bug in `ensureWarSortBars` & `sortMembersList`*:
+       - On Faction Info pages (`factions.php?step=your#faction-info` or `factions.php?step=your&type=1`), the DOM structure is `<div class="f-war-list members-list m-top10"><ul class="table-header">...</ul><ul class="table-body"><li class="table-row">...</li></ul></div>`.
+       - `ensureWarSortBars` queried `.members-list, ul.table-body...` and matched `div.members-list` first, binding the toolbar click listeners to `div.members-list` instead of `ul.table-body`.
+       - Inside `sortMembersList`: `:scope > li, :scope > div.table-row` returned **0 elements** on `div.members-list`. The fallback `children.filter(...)` found only `[ ul.table-body ]` (an array of 1 element). It set `ul.table-body.style.order = "1"` and did nothing to the 91 `<li class="table-row">` members inside.
+    2. *Restrictive `step=profile` URL Guard*:
+       - `updateFactionMemberTableBS()` strictly required `window.location.href.includes("step=profile")` (lines 1905, 2115, 2670, 2687).
+       - On `factions.php?step=your#faction-info`, `step=profile` was FALSE. As a result, `updateFactionMemberTableBS()` aborted, leaving the raw `FF` column unpurged, never injecting the dedicated `Est. BS` column, and never tagging rows with `data-ff-bs-num`.
+    3. *Hardcoded `active` Class on `⏱️ Hosp / War`*:
+       - Line 1804 built `toolbar.innerHTML` with `<button class="ff-sort-btn ff-sort-war active">` hardcoded by default, even when `auto_war_sort` did not execute on non-war/peaceful pages. This created a visual illusion that the list was sorted when it was not.
+    4. *React 19 Online Status SVG Format in `getMemberOnlineTier`*:
+       - React 19 in Torn's faction info app (`faction_info_app.js`) renders the online dot as `<path fill="url(#userStatusOnline)" d="..."/>` and class `userOnlineStatusIcon___ihAUC`.
+       - `getMemberOnlineTier` only checked for `<svg use href="...icon1...">`, returning `tier 2` (offline/idle) for all members on this page when `memberStatusMap` was not populated.
+    5. *Status Classification of Fallen Players*:
+       - "Fallen" players were falling through to rank 4 (Abroad) instead of rank 7 (Other/Inactive).
+  - **Engineering Solutions Implemented (`v3.00`)**:
+    1. *Container Redirection & Dual Protection*:
+       - In `sortMembersList`: If `listElement` contains an inner `ul.table-body`, immediately redirect `listElement = innerBody`.
+       - In `ensureWarSortBars`: If an element has an inner `table-body`, skip it so `setupWarSortBar` attaches directly to the inner `ul.table-body`.
+       - In `setupWarSortBar`: Redirection guard to ensure `listElement` is always `ul.table-body`.
+    2. *Broadened Scope Guard for Faction Rosters*:
+       - Replaced `step=profile` guards in `updateFactionMemberTableBS()` with:
+         `if (!window.location.href.includes("factions.php")) return; if (document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"]')) return;`
+       - Updated call sites in `show_cached_values`, `mainObserver`, and periodic interval so that `updateFactionMemberTableBS()` actively maintains the `Est. BS` column and tags rows on all faction member pages (`step=your`, `#faction-info`, `step=profile`).
+    3. *De-hardcoded Toolbar Active State*:
+       - Removed hardcoded `active` class from the `Hosp / War` button HTML string; synced active button state dynamically to the true sort mode.
+    4. *Enhanced React 19 Online Detection*:
+       - Added support for `userStatusOnline` SVG fill IDs, `userOnlineStatusIcon` classes, and SVG innerHTML matches in `getMemberOnlineTier`.
+    5. *Correct Fallen/Fedded Ranking*:
+       - Explicitly mapped `fallen`, `federal`, and `jail` to rank 7 (Other) in `classifyMember`.
+    6. *Version Bump*:
+       - Bumped userscript version from `v2.99` to `v3.00`.
+  - **Verification**:
+    - Validated userscript syntax via `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+  - **Date & Time**: 2026-10-14 17:35:10 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
