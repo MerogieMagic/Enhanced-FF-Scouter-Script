@@ -1924,3 +1924,24 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-14 17:35:10 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 94
+- **Focus**: Technical Audit of WebSocket, Real-Time Sync, and Resource Bar Updates across Userscripts.
+  - **User Inquiry**:
+    - "does our script affect the websocket? i noticed that some stats dont update automatically after updating our script. Like using a bloodbag should typiclly immediately reduce my hp nd refresh the resorce bars"
+  - **Architectural & Technical Audit**:
+    1. *Zero WebSocket Code / Interception*:
+       - Audited all userscripts (`ff_scouter_bs_enhanced.user.js`, `tornpda_war_enhanced.user.js`, `torn_restock_alerts.user.js`).
+       - Confirmed **0 references** to `WebSocket`, `window.WebSocket`, or `WebSocket.prototype`.
+       - The scripts do not hook, proxy, intercept, or close any WebSocket connections, Pusher channels (`ws-*.torn.com`), or live event streams.
+    2. *Zero Native Network Monkey-Patching*:
+       - The scripts never overwrite or hook `window.fetch` or `XMLHttpRequest.prototype.open/send`. All native in-game requests (such as item usage, attacks, gym training) execute directly between Torn's frontend and Torn's servers without mediation.
+    3. *Execution Sandbox Isolation*:
+       - In Violentmonkey and Tampermonkey, userscripts execute within an isolated sandbox. Because `unsafeWindow.WebSocket` is never accessed or patched, Torn's real-time socket client running in the page context cannot be altered or degraded by the script.
+    4. *Zero Header Resource Bar Manipulation*:
+       - The script does not touch, query, or style `#sidebarroot`, `#barLife`, `#barEnergy`, `#barNerve`, or `#barHappy`.
+    5. *Diagnosis of Frozen / Lagged Resource Bars in Torn City*:
+       - **Torn Pusher / Socket Stalls**: In Torn City, real-time bar synchronization across browser tabs and devices relies on Torn's Pusher server. When Torn's socket connection drops or enters an idle state (frequent during server-side lag or when tabs are throttled in the background), server-side actions (like drawing blood into a blood bag) succeed, but the client-side UI bars freeze until the page is refreshed (`Ctrl + F5`) or until the socket reconnects.
+       - **Restock Alert Script Cleanup**: Recommended confirming whether `torn_restock_alerts.user.js` is still active in Violentmonkey/Tampermonkey from Session 91, as its timer loop may attempt background calls if not switched off.
+  - **Date & Time**: 2026-10-14 21:05:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
