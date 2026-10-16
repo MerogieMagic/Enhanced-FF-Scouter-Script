@@ -22,6 +22,7 @@ Design a premier, high-fidelity, and fully responsive profile signature page for
 * **Current Faction**: Monarch HQ [8336] (`|X|`, Diamond III, 18.3M+ Respect, Recruit)
 * **Employment**: Male Stripper at Dirty Dick's- [65963] (10★ Gentlemen's Club, Dir: MOJOMOFO [627688], Work Stats: 49,428)
 * **Associated / Spouse Account**: AmberTJY [`4540646`] (Level 10 Female, Faction ID: 50244, Full Access API Key: `TJn8SndJa8hRGsPl`)
+* **Associated / Son Account**: AutumnYeQiu [`4570597`] (Level 2 Male, Joined 2026-10-16, Job: Army, Residence: Villa, Full Access API Key: `bciQrPM9Pjr4cXQJ`)
 
 #### Operational Security (OPSEC) Rule
 * **CRITICAL**: **Never reveal raw Battle Stats (Strength, Speed, Defense, Dexterity) or stat totals/ratios.** Leaking battle stats allows enemies to calculate hit chance, damage, and plan mug/hospitalize hits.
@@ -1944,4 +1945,40 @@ Extracted directly via Torn API stock market endpoints:
        - **Restock Alert Script Cleanup**: Recommended confirming whether `torn_restock_alerts.user.js` is still active in Violentmonkey/Tampermonkey from Session 91, as its timer loop may attempt background calls if not switched off.
   - **Date & Time**: 2026-10-14 21:05:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 95
+- **Focus**: 3rd Household Account Registration & Telemetry Audit — AutumnYeQiu [`4570597`].
+  - **User Directive**:
+    - "bciQrPM9Pjr4cXQJ api key for my 3rd account, which my son is playing."
+  - **Live Character Intelligence (Verified via Torn API)**:
+    - **Player Name**: AutumnYeQiu
+    - **Player ID**: `4570597`
+    - **Level**: `2`
+    - **Account Age**: `0 Days` (Signup: `2026-10-16 06:49:46` UTC)
+    - **Rank**: Beginner Newcomer
+    - **Role**: Civilian | Gender: Male
+    - **Status**: Okay (Offline, active ~26 mins ago)
+    - **Employment**: Army (Private)
+    - **Residence**: Villa (`5936221`, rented from Merogie [`4054802`] for $1 total for 90 days; Max Happy: 400)
+    - **Faction**: None (0) (Applications to *Monarch Retardation* and *Vault 76* declined per standard entry criteria)
+    - **Spouse**: None (0)
+    - **Key Access Level**: `Full Access` (`access_level: 4`)
+  - **Inter-Account Asset & Activity Audit**:
+    - **Transfers from Merogie [`4054802`]**:
+      - Bushmaster Carbon 15 (primary starter rifle)
+      - Full Body Armor
+      - Construction Helmet
+      - 100x Lollipops (booster items for early happy/training)
+      - Villa rental offer ($1 / 90 days)
+    - **Combat / Multi Violations**: **0 attacks / 0 defends / 0 bounties**.
+    - **Cash Funneling**: **$0 transferred** (AutumnYeQiu currently has $4,679 on hand and $507 in bank). Zero asymmetric wealth pumping.
+  - **3-Account Household Multi-Account OPSEC & Anti-Cheat Compliance**:
+    - With 3 accounts operating on the same household IP (**Merogie**, **AmberTJY**, and **AutumnYeQiu**), adhering strictly to Torn's multi-account guidelines is paramount:
+      1. *Physical Device Separation*: Ensure your son plays strictly on his own device (his own phone/tablet/computer) without sharing browser profiles, sessions, or cookies with Merogie or AmberTJY.
+      2. *Zero Cross-Combat*: Never attack, hosp, bounce hits, or test weapons between household accounts.
+      3. *Zero Account Management / Sitting*: Each person must click their own energy and crimes. Never log in to "help" your son train or do crimes while he is away.
+      4. *Modest Starter Gifting Only*: Gifting starter gear and renting a residence is completely normal and recognized by staff as legitimate parental mentorship. Avoid large eight-figure cash gifts ($10M+) to sub-level 15 accounts.
+  - **Date & Time**: 2026-10-16 17:45:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
 
