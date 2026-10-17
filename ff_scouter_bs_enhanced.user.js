@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      3.00
+// @version      3.01
 // @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = "3.00";
+    const SCRIPT_VERSION = "3.01";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -1546,7 +1546,7 @@
     }
 
     async function refreshFactionStatusData() {
-        if (apiCallInProgress) return;
+        if (apiCallInProgress || window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
         const enemyFactionLink = document.querySelector(".opponentFactionName___vhESM, a[href*='step=profile&ID='][class*='opponent']");
         const yourFactionLink = document.querySelector(".currentFactionName___eq7n8, a[href*='step=profile&ID='][class*='current']");
         
@@ -1897,6 +1897,7 @@
     }
 
     function ensureWarSortBars() {
+        if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
         const memberLists = document.querySelectorAll(
             '.members-list, ul.table-body, [class*="membersList___"], [class*="membersList"], [class*="tableBody"]'
         );
@@ -1925,8 +1926,8 @@
     // --- Member List Dedicated Est. BS Column ---
     function updateFactionMemberTableBS() {
         // STRICT SCOPE: Execute on all Faction rosters (step=profile, step=your, #faction-info).
-        // NEVER execute on Ranked War or War Views, which have their own native Score columns.
-        if (!window.location.href.includes("factions.php")) return;
+        // NEVER execute on Ranked War, War Views, or static directory listings (step=listing).
+        if (!window.location.href.includes("factions.php") || window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
         if (document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"]')) return;
 
         // 1. Purge stray non-row estimate lines (Ironclad protection for all player rows)
@@ -2647,6 +2648,12 @@
         setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
     }
 
+    // --- Performance Optimization: Completely disable on static Faction Directory & Search pages ---
+    if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) {
+        console.log(`[FF Scouter + War Stuff Enhanced v${SCRIPT_VERSION}] Disabled on Faction Directory (step=listing/search) for peak performance.`);
+        return;
+    }
+
     // --- Main Observer & Lifecycle ---
     create_text_location();
     fetchMyBattleStats();
@@ -2664,6 +2671,7 @@
     }
 
     const mainObserver = new MutationObserver(async function () {
+        if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
         const honor_bars = $(".honor-text-wrap").toArray();
         if (honor_bars.length > 0) {
             await apply_ff_gauge(honor_bars);
@@ -2705,7 +2713,7 @@
     setInterval(updateAllHospitalTimers, 1000);
 
     // Periodic faction API refresh (15 seconds) & Continuous table / sort bar cleaner
-    if (window.location.href.includes("factions.php")) {
+    if (window.location.href.includes("factions.php") && !window.location.href.includes("step=listing") && !window.location.href.includes("step=search")) {
         setInterval(refreshFactionStatusData, API_INTERVAL);
         setTimeout(refreshFactionStatusData, 1000); // Initial run after load
         setInterval(() => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.5
+// @version      9.6
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Merogie, rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -27,7 +27,7 @@
     }
     window.__TORNPDA_WAR_ENHANCED_ACTIVE__ = true;
 
-    const SCRIPT_VERSION = 9.5;
+    const SCRIPT_VERSION = 9.6;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js";
     const SETTINGS_KEY = 'tornpda-war-sorter-settings-v9';
     const CACHE_PREFIX = 'tornpda_ff_cache_';
@@ -500,7 +500,7 @@
     const urlParams = new URLSearchParams(location.search);
     const sid = urlParams.get('sid');
     const PAGE = {
-        faction: location.href.startsWith('https://www.torn.com/factions.php'),
+        faction: location.href.startsWith('https://www.torn.com/factions.php') && !location.href.includes('step=listing') && !location.href.includes('step=search'),
         attack: location.href.includes('sid=attack'),
         profile: location.href.startsWith('https://www.torn.com/profiles.php'),
         bounty: location.href.startsWith('https://www.torn.com/bounties.php'),

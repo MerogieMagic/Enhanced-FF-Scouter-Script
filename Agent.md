@@ -1981,4 +1981,33 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-16 17:45:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 96
+- **Focus**: Performance Optimization & Total Script Exemption for Faction Listing & Directory Pages (`step=listing`, `step=search`).
+  - **User Directive**:
+    - "the was script has terrible performance / lag in the faction listing page maybe we can disable it here" (with screenshot of `torn.com/factions.php?step=listing&q=#start=520`).
+  - **Root Cause Diagnosis**:
+    - `factions.php?step=listing` is the Torn City global faction directory (985+ pages with 20 factions per page).
+    - Because the URL contains `factions.php`, the userscript treated it as a faction roster page, causing severe performance degradation:
+      1. *Leader Honor Bar Scraping*: The script identified all 20 faction leader honor bars (`.honor-text-wrap`), made API calls to `ffscouter.com` for each leader, and injected badges and borders into each leader's card.
+      2. *MutationObserver Reaction Loops*: Injected badges and border styles triggered `mainObserver` on every render and pagination tick.
+      3. *Futile Table Processing*: A 400ms `setInterval` continuously executed `updateFactionMemberTableBS()` and `ensureWarSortBars()`, scanning for member roster elements that do not exist on directory pages.
+      4. *Background API Polling*: A 15s `setInterval` (`refreshFactionStatusData`) grabbed the first faction link on the directory page and polled member statuses from Torn API unnecessarily.
+  - **Engineering Solutions Implemented**:
+    1. *PC Userscript (`ff_scouter_bs_enhanced.user.js` v3.01)*:
+       - Added immediate lifecycle early return:
+         `if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;`
+         Exits prior to initializing any observers, timers, API calls, or DOM modifications.
+       - Added secondary guards in `mainObserver`, `updateFactionMemberTableBS()`, `ensureWarSortBars()`, `refreshFactionStatusData()`, and the 400ms/15s intervals to guarantee zero background CPU usage if navigated dynamically.
+       - Bumped version to **v3.01**.
+    2. *Mobile Script (`tornpda_war_enhanced.user.js` v9.6 & `tornpda_war_enhanced.meta.js` v9.6)*:
+       - Updated `PAGE.faction` route matching to explicitly exclude `step=listing` and `step=search`:
+         `faction: location.href.startsWith('https://www.torn.com/factions.php') && !location.href.includes('step=listing') && !location.href.includes('step=search')`
+       - Prevents mobile toolbar injection and 1s sorting loops on Torn PDA directory pages.
+       - Bumped version to **v9.6**.
+  - **Verification**:
+    - Validated both userscripts with `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-17 09:51:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
