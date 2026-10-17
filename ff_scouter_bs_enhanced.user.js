@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      3.01
+// @version      3.02
 // @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,10 +23,14 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = "3.01";
+    const SCRIPT_VERSION = "3.02";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
+
+    function isListingPage() {
+        return typeof window !== "undefined" && !!window.location && (window.location.href.includes("step=listing") || window.location.href.includes("step=search"));
+    }
 
     // Global in-memory caches
     const memberCountdowns = {}; // userID -> { until: unixSec, state: string, desc: string, lastAction: string }
@@ -1546,7 +1550,7 @@
     }
 
     async function refreshFactionStatusData() {
-        if (apiCallInProgress || window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
+        if (apiCallInProgress || isListingPage()) return;
         const enemyFactionLink = document.querySelector(".opponentFactionName___vhESM, a[href*='step=profile&ID='][class*='opponent']");
         const yourFactionLink = document.querySelector(".currentFactionName___eq7n8, a[href*='step=profile&ID='][class*='current']");
         
@@ -1794,6 +1798,7 @@
     }
 
     function refreshActiveSorts() {
+        if (isListingPage()) return;
         const activeLists = document.querySelectorAll('.ff-flex-sort[data-ff-sort-mode], [data-ff-sort-mode]');
         activeLists.forEach(list => {
             const mode = list.dataset.ffSortMode;
@@ -1897,7 +1902,7 @@
     }
 
     function ensureWarSortBars() {
-        if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
+        if (isListingPage()) return;
         const memberLists = document.querySelectorAll(
             '.members-list, ul.table-body, [class*="membersList___"], [class*="membersList"], [class*="tableBody"]'
         );
@@ -1927,7 +1932,7 @@
     function updateFactionMemberTableBS() {
         // STRICT SCOPE: Execute on all Faction rosters (step=profile, step=your, #faction-info).
         // NEVER execute on Ranked War, War Views, or static directory listings (step=listing).
-        if (!window.location.href.includes("factions.php") || window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
+        if (!window.location.href.includes("factions.php") || isListingPage()) return;
         if (document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"]')) return;
 
         // 1. Purge stray non-row estimate lines (Ironclad protection for all player rows)
@@ -2140,7 +2145,7 @@
                 }
             }
         }
-        if (window.location.href.includes("factions.php")) {
+        if (window.location.href.includes("factions.php") && !isListingPage()) {
             updateFactionMemberTableBS();
         }
         refreshActiveSorts();
@@ -2648,11 +2653,129 @@
         setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
     }
 
-    // --- Performance Optimization: Completely disable on static Faction Directory & Search pages ---
-    if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) {
-        console.log(`[FF Scouter + War Stuff Enhanced v${SCRIPT_VERSION}] Disabled on Faction Directory (step=listing/search) for peak performance.`);
-        return;
+    // --- Directory Scanner for Faction Listing (step=listing & step=search) ---
+    // Scopes strictly to visible leaders on the currently viewed page with zero lag
+    function decorateLeaderHonorBar(element, response) {
+        if (!element) return;
+        element.classList.add('ff-scouter-indicator');
+
+        if (response) {
+            const threat = get_target_threat_info(response);
+            if (threat && threat.tier !== 'unrated') {
+                const currentColor = element.style.getPropertyValue('--ff-border-color');
+                if (currentColor !== threat.color) {
+                    element.style.setProperty('--ff-border-color', threat.color);
+                    element.style.setProperty('--ff-border-glow', threat.glow);
+                    element.style.setProperty('--ff-badge-bg', threat.badgeBg);
+                    element.setAttribute('data-ff-threat', threat.tier);
+                    element.setAttribute('title', threat.tooltip);
+                }
+
+                const rawBs = response.bs_estimate || response.bs_estimate_human;
+                const bsValue = rawBs ? formatBattleStats(rawBs) : (response.value ? `FF ${Math.round(response.value)}` : null);
+                const parsedBs = rawBs ? (typeof rawBs === 'number' ? rawBs : parseBsStringToNumber(rawBs)) : null;
+
+                if (bsValue) {
+                    let badge = element.querySelector('.ff-scouter-bs-badge');
+                    if (!badge) {
+                        badge = document.createElement('div');
+                        badge.className = 'ff-scouter-bs-badge';
+                        element.appendChild(badge);
+                    }
+                    if (badge.textContent !== bsValue) badge.textContent = bsValue;
+                    badge.style.backgroundColor = threat.badgeBg;
+                    if (parsedBs) {
+                        badge.setAttribute('data-ff-bs-num', String(parsedBs));
+                        element.setAttribute('data-ff-bs-num', String(parsedBs));
+                    }
+                } else {
+                    const existingBadge = element.querySelector('.ff-scouter-bs-badge');
+                    if (existingBadge) existingBadge.remove();
+                }
+            } else {
+                element.setAttribute('data-ff-threat', 'unrated');
+            }
+        } else {
+            element.setAttribute('data-ff-threat', 'unrated');
+        }
+        element.setAttribute('data-ff-listing-processed', 'done');
     }
+
+    let isListingProcessing = false;
+    function processFactionListingPage() {
+        if (!isListingPage() || isListingProcessing) return;
+        isListingProcessing = true;
+
+        try {
+            // Target leader honor bars in the directory table rows
+            const candidateBars = document.querySelectorAll(
+                '.table-wrap .honor-text-wrap, .faction-list .honor-text-wrap, .factions-list .honor-text-wrap, [class*="factionList"] .honor-text-wrap, [class*="tableWrap"] .honor-text-wrap, .honor-text-wrap'
+            );
+
+            const missingPlayerIds = [];
+            const elementsToFetch = [];
+
+            for (const el of candidateBars) {
+                if (el.getAttribute('data-ff-listing-processed') === 'done') continue;
+
+                // Extract leader ID from element or row container
+                const rowOrContainer = el.closest('li, tr, .table-row, [class*="tableRow"], [class*="faction"], .leader');
+                const profileLink = el.querySelector('a[href*="profiles.php?XID="]') ||
+                                    el.closest('a[href*="profiles.php?XID="]') ||
+                                    rowOrContainer?.querySelector('a[href*="profiles.php?XID="]');
+
+                const playerId = get_player_id_in_element(el) || profileLink?.href?.match(/XID=(\d+)/)?.[1];
+                if (!playerId) continue;
+
+                el.setAttribute('data-ff-listing-processed', 'pending');
+
+                const cached = get_fair_fight_response(playerId);
+                if (cached) {
+                    decorateLeaderHonorBar(el, cached);
+                } else {
+                    missingPlayerIds.push(playerId);
+                    elementsToFetch.push({ element: el, playerId });
+                }
+            }
+
+            if (missingPlayerIds.length > 0) {
+                const uniqueIds = [...new Set(missingPlayerIds)];
+                update_ff_cache(uniqueIds, () => {
+                    for (const item of elementsToFetch) {
+                        if (!document.body.contains(item.element)) continue;
+                        const resp = get_fair_fight_response(item.playerId);
+                        decorateLeaderHonorBar(item.element, resp);
+                    }
+                });
+            }
+
+            // Also support mini-profiles if user clicks/hovers a leader
+            const mini_profiles = document.querySelectorAll('[class^="profile-mini-_userProfileWrapper_"]:not(.ff-processed)');
+            for (const mini of mini_profiles) {
+                mini.classList.add('ff-processed');
+                const player_id = get_player_id_in_element(mini);
+                apply_to_mini_profile(mini);
+                if (player_id) update_ff_cache([player_id], () => apply_to_mini_profile(mini));
+            }
+        } finally {
+            isListingProcessing = false;
+        }
+    }
+
+    let listingDebounceTimer = null;
+    function queueFactionListingProcess(delay = 150) {
+        if (listingDebounceTimer) clearTimeout(listingDebounceTimer);
+        listingDebounceTimer = setTimeout(() => {
+            processFactionListingPage();
+        }, delay);
+    }
+
+    // Hashchange listener for pagination without full page reload
+    window.addEventListener('hashchange', () => {
+        if (isListingPage()) {
+            queueFactionListingProcess(150);
+        }
+    });
 
     // --- Main Observer & Lifecycle ---
     create_text_location();
@@ -2670,8 +2793,15 @@
         }
     }
 
+    if (isListingPage()) {
+        queueFactionListingProcess(300);
+    }
+
     const mainObserver = new MutationObserver(async function () {
-        if (window.location.href.includes("step=listing") || window.location.href.includes("step=search")) return;
+        if (isListingPage()) {
+            queueFactionListingProcess(150);
+            return;
+        }
         const honor_bars = $(".honor-text-wrap").toArray();
         if (honor_bars.length > 0) {
             await apply_ff_gauge(honor_bars);
@@ -2709,11 +2839,13 @@
 
     mainObserver.observe(document.body, { childList: true, subtree: true });
 
-    // Periodic live countdown timers (1 second)
-    setInterval(updateAllHospitalTimers, 1000);
+    // Periodic live countdown timers (1 second) - disabled on directory listing
+    if (!isListingPage()) {
+        setInterval(updateAllHospitalTimers, 1000);
+    }
 
     // Periodic faction API refresh (15 seconds) & Continuous table / sort bar cleaner
-    if (window.location.href.includes("factions.php") && !window.location.href.includes("step=listing") && !window.location.href.includes("step=search")) {
+    if (window.location.href.includes("factions.php") && !isListingPage()) {
         setInterval(refreshFactionStatusData, API_INTERVAL);
         setTimeout(refreshFactionStatusData, 1000); // Initial run after load
         setInterval(() => {
@@ -2726,7 +2858,9 @@
     setTimeout(autoCheckForUpdates, 3000);
 
     // Background pre-fetch of safe innate targets from FF Scouter Target Finder (1.5s after load)
-    setTimeout(() => { fetchFFScouterTargets(false); }, 1500);
+    if (!isListingPage()) {
+        setTimeout(() => { fetchFFScouterTargets(false); }, 1500);
+    }
 
     console.log(`[FF Scouter + War Stuff Enhanced v${SCRIPT_VERSION}] Loaded Successfully.`);
 })();

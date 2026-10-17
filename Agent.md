@@ -2009,5 +2009,36 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 09:51:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 97
+- **Focus**: Targeted Single-Page Directory Scanner for Faction Listing & Search (`step=listing`, `step=search`) in `ff_scouter_bs_enhanced.user.js` (v3.02).
+  - **User Clarification & Directive**:
+    - "or perhaps we can list only for the current viewed page?"
+  - **Architectural Requirement**:
+    - Re-enable estimated Battle Stats (BS) badges and threat borders for faction leaders on the global faction directory (`factions.php?step=listing` & `step=search`), but strictly scoped to the **currently viewed page** (20 factions).
+    - Eliminate all lag, freezing, and cascading MutationObserver loops when paginating through directory pages (e.g. pages 26 -> 27 -> 28 ... up to 985+).
+  - **Engineering Solutions Implemented (`v3.02`)**:
+    1. *Dedicated Lightweight Directory Scanner (`processFactionListingPage()`)*:
+       - Scopes strictly to visible leader honor bars on the current page (`.table-wrap .honor-text-wrap, .faction-list .honor-text-wrap, .honor-text-wrap`).
+       - Extracts player IDs reliably via `get_player_id_in_element` and adjacent profile links.
+       - Immediately stamps elements with `data-ff-listing-processed="pending"` prior to network operations to prevent re-entrant observer loops.
+       - Renders cached BS estimates immediately and batches all uncached leader IDs into a single HTTP request to FF Scouter API (`update_ff_cache`).
+       - Targeted decorator (`decorateLeaderHonorBar`): Sets threat borders (`--ff-border-color`, `--ff-border-glow`, `--ff-badge-bg`) and injects `.ff-scouter-bs-badge` cleanly without global DOM re-traversals.
+       - Detached element protection: Gracefully skips decorating elements if the user paged away before the API request returned.
+       - Stamps `data-ff-listing-processed="done"` on every element (including unrated/no_data targets) so subsequent observer passes exit in microseconds.
+    2. *Debounced Pagination & Hash Change Trigger*:
+       - Attached to `window.addEventListener('hashchange', ...)` with a 150ms debounce (`queueFactionListingProcess`).
+       - When clicking page buttons (e.g. `#start=520` -> `#start=540`), the debounce allows Torn's AJAX to settle before executing a single pass over the new 20 factions.
+    3. *Zero-Overhead Observer Guard*:
+       - In `mainObserver`: When `isListingPage()` is true, it queues the debounced listing scanner and immediately exits (`return`). It never executes member roster scans, table column injections, or war sorting checks on directory pages.
+    4. *Zero Background Polling on Directory*:
+       - Hospital timers (`updateAllHospitalTimers`), 15s faction status API polling (`refreshFactionStatusData`), 400ms table maintenance intervals, and target finder pre-fetching (`fetchFFScouterTargets`) remain strictly disabled on `step=listing` and `step=search`.
+    5. *Version Bump*:
+       - Bumped `ff_scouter_bs_enhanced.user.js` to **v3.02**.
+  - **Verification**:
+    - Validated userscript syntax via `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+  - **Date & Time**: 2026-10-17 10:05:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
