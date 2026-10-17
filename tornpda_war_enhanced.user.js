@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.7
+// @version      9.8
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Merogie, rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -211,139 +211,30 @@
             letter-spacing: 1.5px !important;
         }
 
-        /* --- Absolute HP Tracking & Combat HUD for Torn PDA --- */
-        .ff-player-hp-badge {
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 4px !important;
-            margin-left: auto !important;
-            padding: 1px 6px !important;
-            border-radius: 4px !important;
-            font-family: monospace, monospace !important;
-            font-size: 11px !important;
-            font-weight: 700 !important;
-            line-height: 1.2 !important;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9) !important;
-            white-space: nowrap !important;
-            user-select: none !important;
-            transition: all 0.2s ease !important;
-            z-index: 10 !important;
-        }
-
-        .ff-player-hp-badge.high {
-            background: rgba(22, 101, 52, 0.6) !important;
-            border: 1px solid rgba(34, 197, 94, 0.7) !important;
-            color: #4ade80 !important;
-        }
-
-        .ff-player-hp-badge.warning {
-            background: rgba(161, 98, 7, 0.6) !important;
-            border: 1px solid rgba(234, 179, 8, 0.7) !important;
-            color: #facc15 !important;
-        }
-
-        .ff-player-hp-badge.danger {
-            background: rgba(153, 27, 27, 0.7) !important;
-            border: 1px solid #ef4444 !important;
-            color: #fca5a5 !important;
-            animation: ffExecuteGlowPDA 1.2s infinite ease-in-out !important;
-        }
-
-        .ff-player-hp-badge.dead {
-            background: rgba(30, 41, 59, 0.7) !important;
-            border: 1px solid rgba(148, 163, 184, 0.4) !important;
-            color: #94a3b8 !important;
-        }
-
-        .ff-attack-hp-hud {
+        /* Direct Life Bar Numerical Overlay (0% Layout Distortion) */
+        .ff-life-bar-text {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
             display: flex !important;
             align-items: center !important;
-            justify-content: space-between !important;
-            flex-wrap: wrap !important;
-            gap: 4px !important;
-            margin: 4px 0 8px 0 !important;
-            padding: 4px 10px !important;
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.92) 100%) !important;
-            border: 1px solid rgba(71, 85, 105, 0.5) !important;
-            border-radius: 6px !important;
-            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5) !important;
-            box-sizing: border-box !important;
-            width: 100% !important;
-            clear: both !important;
-        }
-
-        .ff-hud-fighter {
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 4px !important;
-            font-size: 11.5px !important;
-            font-weight: 700 !important;
-            color: #f1f5f9 !important;
-        }
-
-        .ff-hud-vs {
-            font-size: 11px !important;
-            font-weight: 900 !important;
-            letter-spacing: 0.5px !important;
-            color: #94a3b8 !important;
-            padding: 0 4px !important;
-        }
-
-        .ff-hud-hp-pill {
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 3px !important;
-            padding: 1px 6px !important;
-            border-radius: 4px !important;
-            font-family: monospace, monospace !important;
+            justify-content: center !important;
             font-size: 11px !important;
             font-weight: 800 !important;
-        }
-
-        .ff-hud-hp-pill.high {
-            background: rgba(34, 197, 94, 0.25) !important;
-            border: 1px solid rgba(34, 197, 94, 0.5) !important;
-            color: #4ade80 !important;
-        }
-
-        .ff-hud-hp-pill.warning {
-            background: rgba(234, 179, 8, 0.25) !important;
-            border: 1px solid rgba(234, 179, 8, 0.5) !important;
-            color: #facc15 !important;
-        }
-
-        .ff-hud-hp-pill.danger {
-            background: rgba(239, 68, 68, 0.3) !important;
-            border: 1px solid rgba(239, 68, 68, 0.6) !important;
-            color: #f87171 !important;
-            animation: ffExecuteGlowPDA 1.2s infinite ease-in-out !important;
-        }
-
-        .ff-hud-hp-pill.dead {
-            background: rgba(148, 163, 184, 0.15) !important;
-            border: 1px solid rgba(148, 163, 184, 0.3) !important;
-            color: #94a3b8 !important;
-        }
-
-        .ff-hud-execute-badge {
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 2px !important;
-            background: #dc2626 !important;
+            font-family: monospace, monospace !important;
             color: #ffffff !important;
-            font-size: 9.5px !important;
-            font-weight: 900 !important;
-            padding: 1px 4px !important;
-            border-radius: 3px !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9) !important;
+            pointer-events: none !important;
+            z-index: 10 !important;
             letter-spacing: 0.3px !important;
-            animation: ffExecuteGlowPDA 0.8s infinite ease-in-out !important;
+            white-space: nowrap !important;
         }
 
-        @keyframes ffExecuteGlowPDA {
-            0% { box-shadow: 0 0 3px #ef4444; }
-            50% { box-shadow: 0 0 8px #ef4444, 0 0 3px #dc2626; }
-            100% { box-shadow: 0 0 3px #ef4444; }
+        .ff-player-hp-badge,
+        .ff-attack-hp-hud {
+            display: none !important;
         }
 
         /* Mobile Floating Controls */
@@ -1181,149 +1072,111 @@
         };
     }
 
-    function updateFighterHpBadge(cardEl, hpInfo, fighterName) {
-        if (!cardEl || !hpInfo) return;
+    function findLifeBarElement(cardEl) {
+        if (!cardEl) return null;
 
-        const headerEl = cardEl.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]') || cardEl;
-        if (headerEl && headerEl !== cardEl) {
-            headerEl.style.display = 'flex';
-            headerEl.style.alignItems = 'center';
-            headerEl.style.justifyContent = 'space-between';
-        }
+        const isExcluded = (el) => !!el.closest('[class*="weapon___"], [class*="equip___"], [class*="item___"], [class*="cooldown___"], .ff-player-hp-badge, .ff-attack-hp-hud');
 
-        let badge = cardEl.querySelector('.ff-player-hp-badge');
-        if (!badge) {
-            badge = document.createElement('div');
-            badge.className = 'ff-player-hp-badge';
-            if (headerEl && headerEl !== cardEl) {
-                headerEl.appendChild(badge);
-            } else {
-                cardEl.prepend(badge);
+        const candidates = cardEl.querySelectorAll(
+            '[class*="life___"], [class*="health___"], [class*="lifeBar___"], [class*="statusBar___"], [role="progressbar"]'
+        );
+
+        for (const el of candidates) {
+            if (isExcluded(el)) continue;
+            if (el.getAttribute('role') === 'progressbar') {
+                return el;
+            }
+            if (el.querySelector('[class*="fill___"], [class*="filler___"], div[style*="width"], div[style*="transform"]')) {
+                return el;
+            }
+            if (el.offsetWidth > 40 || (el.className && typeof el.className === 'string' && el.className.includes('life'))) {
+                return el;
             }
         }
 
-        const pct = hpInfo.percent;
-        let tierClass = 'high';
-        let executeBadge = '';
-
-        if (pct <= 0) {
-            tierClass = 'dead';
-        } else if (pct <= 20) {
-            tierClass = 'danger';
-            executeBadge = '<span class="ff-hud-execute-badge">⚔️ EXECUTE</span>';
-        } else if (pct < 50) {
-            tierClass = 'warning';
-        }
-
-        badge.className = `ff-player-hp-badge ${tierClass}`;
-
-        const pctStr = pct.toFixed(pct % 1 === 0 ? 0 : 1);
-        let hpDisplay = '';
-        if (hpInfo.maximum > 0) {
-            hpDisplay = `${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()} (${pctStr}%)`;
-        } else {
-            hpDisplay = `${pctStr}% HP`;
-        }
-
-        const badgeHtml = `<span class="ff-hp-val">❤️ ${hpDisplay}</span>${executeBadge}`;
-        const targetClass = `ff-player-hp-badge ${tierClass}`;
-
-        if (badge.dataset.lastHtml === badgeHtml && badge.className === targetClass) return;
-        badge.dataset.lastHtml = badgeHtml;
-        badge.className = targetClass;
-        badge.innerHTML = badgeHtml;
-    }
-
-    function updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName) {
-        const attackRoot = document.getElementById('attack-root') || document.querySelector('.content-wrapper') || document.getElementById('mainContainer');
-        if (!attackRoot) return;
-
-        let hud = document.getElementById('ff-attack-hp-hud');
-        if (!hud) {
-            hud = document.createElement('div');
-            hud.id = 'ff-attack-hp-hud';
-            hud.className = 'ff-attack-hp-hud';
-
-            const hospBanner = document.getElementById('ff-attack-hosp-banner');
-            if (hospBanner && hospBanner.parentNode) {
-                hospBanner.parentNode.insertBefore(hud, hospBanner.nextSibling);
-            } else {
-                const topHeader = attackRoot.querySelector('h4, [class*="title___"], [class*="header___"], [class*="title"], [class*="top___"]');
-                if (topHeader && topHeader.parentNode) {
-                    topHeader.parentNode.insertBefore(hud, topHeader.nextSibling);
-                } else {
-                    attackRoot.prepend(hud);
+        const fills = cardEl.querySelectorAll('div[style*="width"], div[style*="transform"]');
+        for (const fill of fills) {
+            if (isExcluded(fill)) continue;
+            const w = fill.style?.width || '';
+            const t = fill.style?.transform || '';
+            if (w.includes('%') || t.includes('scaleX')) {
+                const parent = fill.parentElement;
+                if (parent && !isExcluded(parent)) {
+                    return parent;
                 }
             }
         }
 
-        const getTier = (pct) => {
-            if (pct <= 0) return 'dead';
-            if (pct <= 20) return 'danger';
-            if (pct < 50) return 'warning';
-            return 'high';
-        };
+        return null;
+    }
 
-        const attTier = attackerHp ? getTier(attackerHp.percent) : 'high';
-        const defTier = defenderHp ? getTier(defenderHp.percent) : 'high';
+    function updateFighterLifeBarText(cardEl, hpInfo) {
+        if (!cardEl || !hpInfo) return;
 
-        const attStr = attackerHp ? (attackerHp.maximum > 0 ? `${attackerHp.current.toLocaleString()} / ${attackerHp.maximum.toLocaleString()} (${attackerHp.percent.toFixed(attackerHp.percent % 1 === 0 ? 0 : 1)}%)` : `${attackerHp.percent.toFixed(1)}%`) : '--';
-        const defStr = defenderHp ? (defenderHp.maximum > 0 ? `${defenderHp.current.toLocaleString()} / ${defenderHp.maximum.toLocaleString()} (${defenderHp.percent.toFixed(defenderHp.percent % 1 === 0 ? 0 : 1)}%)` : `${defenderHp.percent.toFixed(1)}%`) : '--';
+        const barEl = findLifeBarElement(cardEl);
+        if (!barEl) return;
 
-        const defExecute = (defenderHp && defenderHp.percent > 0 && defenderHp.percent <= 20)
-            ? '<span class="ff-hud-execute-badge">⚔️ EXECUTE READY</span>'
-            : '';
+        if (getComputedStyle(barEl).position === 'static') {
+            barEl.style.position = 'relative';
+        }
 
-        const hudHtml = `
-            <div class="ff-hud-fighter ff-hud-attacker">
-                <span>🛡️</span>
-                <span>${attackerName || 'You'}:</span>
-                <span class="ff-hud-hp-pill ${attTier}">${attStr}</span>
-            </div>
-            <div class="ff-hud-vs">VS</div>
-            <div class="ff-hud-fighter ff-hud-defender">
-                <span>⚔️</span>
-                <span>${defenderName || 'Target'}:</span>
-                <span class="ff-hud-hp-pill ${defTier}">${defStr}</span>
-                ${defExecute}
-            </div>
-        `;
+        let textEl = barEl.querySelector('.ff-life-bar-text');
+        if (!textEl) {
+            textEl = document.createElement('div');
+            textEl.className = 'ff-life-bar-text';
+            barEl.appendChild(textEl);
+        }
 
-        if (hud.dataset.lastHtml === hudHtml) return;
-        hud.dataset.lastHtml = hudHtml;
-        hud.innerHTML = hudHtml;
+        let hpText = '';
+        if (hpInfo.maximum > 0) {
+            const pctStr = hpInfo.percent.toFixed(hpInfo.percent % 1 === 0 ? 0 : 1);
+            hpText = `${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()} (${pctStr}%)`;
+        } else {
+            hpText = `${hpInfo.percent.toFixed(1)}%`;
+        }
+
+        if (textEl.dataset.lastText === hpText) return;
+        textEl.dataset.lastText = hpText;
+        textEl.textContent = hpText;
     }
 
     function updateAttackHpDisplay() {
         if (!PAGE.attack) return;
 
+        // Cleanup any legacy badges or HUD that might distort layouts
+        const legacyBadges = document.querySelectorAll('.ff-player-hp-badge');
+        legacyBadges.forEach(b => b.remove());
+        const legacyHud = document.getElementById('ff-attack-hp-hud');
+        if (legacyHud) legacyHud.remove();
+
         const { attackerCard, defenderCard } = findFighterCards();
         if (!attackerCard && !defenderCard) return;
+
+        // Reset any inline flex on headers if modified previously
+        if (attackerCard) {
+            const attHeader = attackerCard.querySelector('[class*="header___"], [class*="userName___"]');
+            if (attHeader && attHeader.style.display === 'flex') attHeader.style.display = '';
+        }
+        if (defenderCard) {
+            const defHeader = defenderCard.querySelector('[class*="header___"], [class*="userName___"]');
+            if (defHeader && defHeader.style.display === 'flex') defHeader.style.display = '';
+        }
 
         const match = location.href.match(/user2ID=(\d+)/);
         const targetId = match ? match[1] : null;
         const cachedTargetLife = targetId ? (targetLifeData[targetId] || getCachedStats(`target_life_${targetId}`)) : null;
         const defenderMaxHp = cachedTargetLife?.maximum || 0;
-        const defenderName = cachedTargetLife?.name || (defenderCard?.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]')?.textContent?.trim() || 'Target');
 
         const attackerMaxHp = getAttackerMaxHp();
-        const attackerName = getMyPlayerName();
-
-        let attackerHp = null;
-        let defenderHp = null;
 
         if (attackerCard) {
-            attackerHp = getFighterHpInfo(attackerCard, attackerMaxHp, true);
-            if (attackerHp) updateFighterHpBadge(attackerCard, attackerHp, attackerName);
+            const attackerHp = getFighterHpInfo(attackerCard, attackerMaxHp, true);
+            if (attackerHp) updateFighterLifeBarText(attackerCard, attackerHp);
         }
 
         if (defenderCard) {
-            defenderHp = getFighterHpInfo(defenderCard, defenderMaxHp, false);
-            if (defenderHp) updateFighterHpBadge(defenderCard, defenderHp, defenderName);
-        }
-
-        if (attackerHp || defenderHp) {
-            updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName);
+            const defenderHp = getFighterHpInfo(defenderCard, defenderMaxHp, false);
+            if (defenderHp) updateFighterLifeBarText(defenderCard, defenderHp);
         }
     }
 

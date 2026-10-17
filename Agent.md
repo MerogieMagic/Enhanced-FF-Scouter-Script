@@ -2364,14 +2364,39 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 21:55:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
-
-
-
-
-
-
-
-
-
-
-
+#### Session 107
+- **Focus**: Elimination of Attack Screen Layout Distortion & Implementation of Zero-Distortion Centered In-Bar Numerical HP Overlay in `ff_scouter_bs_enhanced.user.js` (`v3.05`) and `tornpda_war_enhanced.user.js` (`v9.8`).
+  - **User Directive**:
+    - "hp bar should not be shown like this, its distorting many componnts" (referencing visual distortions on Torn's attack screen `page.php?sid=attack&user2ID=...`).
+  - **Root Cause Diagnosis & Component Forensic Breakdown**:
+    1. *Attacker Card Name Distortion*:
+       - `updateFighterHpBadge` applied inline `display: flex; align-items: center; justify-content: space-between` to `cardEl.querySelector('[class*="header___"], [class*="userName___"]')`.
+       - Setting `display: flex` forced React's header container into flexbox shrink behavior, causing `text-overflow: ellipsis` to compress the player's name (`Merogie`) into `M...`.
+    2. *Defender Card Weapon Slot Intrusion*:
+       - The badge query `[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]` matched `.title___` on the defender's Primary Weapon loadout slot (`9mm Uzi`).
+       - This forcibly appended `❤️ 1,286 / 1,286 (100%)` directly on top of the primary weapon box, obscuring weapon name, damage, accuracy, and proficiency indicators.
+    3. *Top Header Collision & Overlap*:
+       - The top combat banner (`#ff-attack-hp-hud`) was inserted beneath `h4`. Simultaneously, `create_text_location()` was inserting the Fair Fight / Battle Stats single-run line (`#ff-scouter-run-once`) via `h4.parentNode.parentNode.after(info_line)`, colliding directly with Torn's native `<= Back to profile` navigation wrapper (`.links-top-wrap`).
+  - **Engineering Deliverables Implemented**:
+    1. *Direct In-Bar Numerical Text Overlay (`.ff-life-bar-text`)*:
+       - Completely removed intrusive `.ff-player-hp-badge` and `#ff-attack-hp-hud`.
+       - Implemented `updateFighterLifeBarText(cardEl, hpInfo)`: centers the numerical HP text (`3,937 / 3,937 (100%)` or `1,286 / 1,286 (100%)`) directly inside Torn's native health progress bar (`[role="progressbar"]`, `[class*="life___"]`).
+       - Styled with `position: absolute !important; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 10;`.
+       - Zero layout footprint in DOM flow: 0px displacement, 0 flex squishing, and 0 distortion of weapon slots or headers.
+       - High-contrast typography: bold monospace white font with deep dual drop-shadows (`text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9)`), ensuring crystal-clear readability over green, yellow, or red health bar fills.
+    2. *Weapon Slot & Player Name Protection*:
+       - Replaced broad header queries with precision progressbar targeting (`findLifeBarElement`), strictly ignoring weapon, equipment, item, and cooldown nodes.
+       - Added automatic cleanup of any legacy inline `display: flex` on fighter headers, restoring full player names.
+    3. *Clean Header Navigation Anchoring in `create_text_location`*:
+       - Anchored `#ff-scouter-run-once` cleanly after Torn's native `.links-top-wrap` (`Back to profile`) with a dedicated margin (`4px 0 10px 0`), preventing banner collision.
+    4. *Full Mobile & Desktop Parity Across Script Suite*:
+       - Upgraded both scripts with identical zero-distortion architecture and legacy badge cleanup.
+       - Bumped `ff_scouter_bs_enhanced.user.js` to **v3.05**.
+       - Bumped `tornpda_war_enhanced.user.js` and `tornpda_war_enhanced.meta.js` to **v9.8**.
+  - **Verification**:
+    - Validated syntax on all files:
+      - `node --check ff_scouter_bs_enhanced.user.js` (exit code 0)
+      - `node --check tornpda_war_enhanced.user.js` (exit code 0)
+      - `node --check tornpda_war_enhanced.meta.js` (exit code 0)
+  - **Date & Time**: 2026-10-17 22:06:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
