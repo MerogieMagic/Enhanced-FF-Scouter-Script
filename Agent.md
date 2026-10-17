@@ -2224,6 +2224,44 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 15:08:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 103
+- **Focus**: Elimination of Profile UI Distortion & Implementation of Combined "Online AND Okay" Auto-Attack Staging (`v1.04`).
+  - **User Directives**:
+    1. "can tweak auto open attack tab if they are online AND okay"
+    2. "button distorting UI" (accompanied by profile screenshot `media_1792222157615_50b42a40.png` showing the quick-add button pushing down the "Actions" box).
+  - **Root Cause & Technical Analysis**:
+    1. *Profile Page UI Distortion*:
+       - In `updateProfilePageButton()`, the target container matched `.profile-right-wrapper`.
+       - Calling `targetContainer.prepend(btn)` inserted the button directly at the top of the right column, above the native Torn "Actions" card.
+       - This created an unwanted top block that vertically displaced "Actions" ~35px below the left "User Information" card, breaking the layout symmetry.
+    2. *Auto-Attack Staging Logic*:
+       - Previously, `autoOpenAttack` opened the attack tab whenever a target's state changed to `Okay`, regardless of their activity/online status.
+       - If a target naturally exited hospital while offline/asleep, or if the target was already Okay and subsequently came online, the attack tab did not open conditionally based on active status.
+  - **Engineering Deliverables Implemented**:
+    1. *Profile Button Relocation (Zero-Footprint Header Integration)*:
+       - Relocated the button inside the native **Actions header bar** (`.profile-right-wrapper .title-black`, `h4`, `[class*="title"]`).
+       - Configured the header container with `display: flex; justify-content: space-between; align-items: center;` so "Actions" remains on the left while the compact radar button floats cleanly on the far right.
+       - Re-styled `.stakeout-profile-btn` as a sleek, compact badge (`2px 8px`, `font-size: 11px`, `line-height: 1.2`) with label `🎯 + Stakeout` / `🎯 In Radar (Remove)`.
+       - Added automatic cleanup to remove and relocate any existing button previously prepended directly to `.profile-right-wrapper`.
+       - Result: 0px vertical height impact; "User Information" and "Actions" cards are 100% flush and horizontally aligned.
+    2. *Combined "Online AND Okay" Attack Staging (`triggerAutoAttackOpen`)*:
+       - Re-engineered trigger conditions: Auto-attack tab now strictly requires `isNowOnline && isNowOkay` (`Online` or `Idle` activity AND `Okay` combat state).
+       - Evaluated seamlessly on:
+         - *Hospital Discharge / Med-out*: `!wasOkay && isNowOkay && isNowOnline`
+         - *Log-in / Activity Detected*: `!wasOnline && isNowOnline && isNowOkay`
+         - *Flight Landing*: `wasTraveling && isNowOkay && isNowOnline`
+       - Implemented 30-second deduplication guard (`lastAttackTabOpened[targetId]`) to prevent duplicate tab opening if multiple trigger transitions coincide on the same API poll.
+       - Added popup-blocker detection with non-blocking toast warning if the browser blocks the window popup.
+       - Updated radar settings toggle label to: `Auto-Open Attack Tab (Online & Okay)` with explanatory title tooltip.
+    3. *Files Updated & Version Bump*:
+       - `torn_mercenary_stakeout.user.js` (bumped to **v1.04**)
+       - `torn_mercenary_stakeout.meta.js` (bumped to **v1.04**)
+  - **Verification**:
+    - Validated syntax with `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-17 15:33:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
 

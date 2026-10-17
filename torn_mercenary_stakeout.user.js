@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.03
+// @version      1.04
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -23,7 +23,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.03";
+    const SCRIPT_VERSION = "1.04";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -377,7 +377,28 @@
         }
     }
 
-    // --- 6. TRIGGER EVALUATION ENGINE ---
+    // --- 6. TRIGGER EVALUATION & ATTACK STAGING ENGINE ---
+    const lastAttackTabOpened = {};
+    function triggerAutoAttackOpen(targetId) {
+        if (!config.autoOpenAttack) return;
+        const now = Date.now();
+        if (lastAttackTabOpened[targetId] && now - lastAttackTabOpened[targetId] < 30000) {
+            return;
+        }
+        lastAttackTabOpened[targetId] = now;
+        try {
+            const attackUrl = `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`;
+            const win = window.open(attackUrl, '_blank');
+            if (!win || win.closed || typeof win.closed === 'undefined') {
+                showStakeoutToast('⚠️ Attack tab popup was blocked by browser. Please allow popups for torn.com!');
+            } else {
+                showStakeoutToast(`⚔️ Auto-opened attack tab for [${targetId}] (Online & Okay)!`);
+            }
+        } catch (e) {
+            console.error('[Stakeout] Auto attack popup error:', e);
+        }
+    }
+
     function evaluateTargetTriggers(targetId, freshData) {
         if (!freshData || freshData.error) return;
 
@@ -398,27 +419,40 @@
         const previous = existing ? existing.data : null;
 
         if (previous) {
-            if (config.alertOnOkay && previous.state !== 'Okay' && currentSnapshot.state === 'Okay') {
+            const isNowOkay = currentSnapshot.state === 'Okay';
+            const wasOkay = previous.state === 'Okay';
+            const isNowOnline = currentSnapshot.online === 'Online' || currentSnapshot.online === 'Idle';
+            const wasOnline = previous.online === 'Online' || previous.online === 'Idle';
+
+            // Transition: Target discharged or medded out of hospital
+            if (config.alertOnOkay && !wasOkay && isNowOkay) {
                 playStakeoutAlarm('okay');
                 sendStakeoutNotification(
                     `${currentSnapshot.name} is OKAY!`,
                     `Target discharged or medded out of hospital! Click to launch attack.`,
                     `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
                 );
-                if (config.autoOpenAttack) {
-                    window.open(`https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`, '_blank');
+                // Auto-open attack tab if target is Online AND Okay
+                if (config.autoOpenAttack && isNowOnline && isNowOkay) {
+                    triggerAutoAttackOpen(targetId);
                 }
             }
 
-            if (config.alertOnOnline && previous.online === 'Offline' && (currentSnapshot.online === 'Online' || currentSnapshot.online === 'Idle')) {
+            // Transition: Target came online or active
+            if (config.alertOnOnline && !wasOnline && isNowOnline) {
                 playStakeoutAlarm('online');
                 sendStakeoutNotification(
                     `${currentSnapshot.name} is ONLINE!`,
                     `Activity detected (${currentSnapshot.online}): ${currentSnapshot.lastActionRel}`,
                     `https://www.torn.com/profiles.php?XID=${targetId}`
                 );
+                // Auto-open attack tab if target is Online AND Okay
+                if (config.autoOpenAttack && isNowOnline && isNowOkay) {
+                    triggerAutoAttackOpen(targetId);
+                }
             }
 
+            // Transition: Flight landing
             if (config.alertOnLanding && previous.state === 'Traveling' && currentSnapshot.state !== 'Traveling') {
                 playStakeoutAlarm('okay');
                 sendStakeoutNotification(
@@ -426,8 +460,13 @@
                     `Flight arrived: now ${currentSnapshot.state} (${currentSnapshot.desc})`,
                     `https://www.torn.com/profiles.php?XID=${targetId}`
                 );
+                // Auto-open attack tab if target landed and is Online AND Okay
+                if (config.autoOpenAttack && isNowOnline && isNowOkay) {
+                    triggerAutoAttackOpen(targetId);
+                }
             }
 
+            // Transition: Full HP
             if (config.alertOnFullHp && previous.hpPct < 100 && currentSnapshot.hpPct >= 100) {
                 playStakeoutAlarm('online');
                 sendStakeoutNotification(
@@ -767,17 +806,21 @@
         .stakeout-profile-btn {
             display: inline-flex !important;
             align-items: center !important;
-            gap: 5px !important;
-            background: #1e293b !important;
+            gap: 4px !important;
+            background: rgba(30, 41, 59, 0.85) !important;
             border: 1px solid #3b82f6 !important;
-            color: #60a5fa !important;
-            padding: 4px 10px !important;
+            color: #93c5fd !important;
+            padding: 2px 8px !important;
             border-radius: 4px !important;
-            font-size: 12px !important;
+            font-size: 11px !important;
             font-weight: 700 !important;
             cursor: pointer !important;
-            margin: 4px 2px !important;
+            margin: 0 !important;
+            line-height: 1.2 !important;
             transition: all 0.15s ease !important;
+            text-transform: none !important;
+            letter-spacing: normal !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
         }
         .stakeout-profile-btn:hover {
             background: #2563eb !important;
@@ -785,7 +828,7 @@
             border-color: #60a5fa !important;
         }
         .stakeout-profile-btn.active {
-            background: #166534 !important;
+            background: rgba(22, 101, 52, 0.85) !important;
             border-color: #22c55e !important;
             color: #86efac !important;
         }
@@ -900,8 +943,8 @@
                         <span>Desktop Notification</span>
                         <input type="checkbox" id="toggle-desktop-notif" ${config.desktopNotif ? 'checked' : ''} />
                     </label>
-                    <label class="stakeout-toggle-row">
-                        <span>Auto-Open Attack Tab when Okay</span>
+                    <label class="stakeout-toggle-row" title="Automatically opens the pre-staged attack tab in a new window when target is both Active (Online/Idle) and Attackable (Okay)">
+                        <span>Auto-Open Attack Tab (Online & Okay)</span>
                         <input type="checkbox" id="toggle-auto-attack" ${config.autoOpenAttack ? 'checked' : ''} />
                     </label>
                     <div style="display: flex; gap: 6px; margin-top: 4px;">
@@ -1140,21 +1183,47 @@
         const isWatched = watchlist.includes(profileId);
         let btn = document.getElementById('stakeout-profile-action-btn');
 
-        if (!btn) {
-            const targetContainer = document.querySelector('.profile-container .basic-information, .profile-right-wrapper, .user-information, .profile-wrapper h4, .profile-wrapper');
-            if (!targetContainer) return;
-
-            btn = document.createElement('button');
-            btn.id = 'stakeout-profile-action-btn';
-            btn.className = 'stakeout-profile-btn';
-            targetContainer.prepend(btn);
+        // If btn was previously inserted directly into .profile-right-wrapper (causing distortion), remove it
+        if (btn && btn.parentElement && btn.parentElement.classList.contains('profile-right-wrapper')) {
+            btn.remove();
+            btn = null;
         }
 
-        const newText = isWatched ? `🎯 In Stakeout Radar (Click to Remove)` : `🎯 Add to Stakeout Radar`;
+        if (!btn) {
+            // Priority 1: Inside the "Actions" header bar (aligned right, 0px vertical footprint)
+            const actionsHeader = document.querySelector(
+                '.profile-right-wrapper .title-black, .profile-right-wrapper .title, .profile-right-wrapper h4, .profile-right-wrapper [class*="title"], [class*="actions"] .title-black, [class*="actions"] h4'
+            );
+
+            if (actionsHeader) {
+                btn = document.createElement('button');
+                btn.id = 'stakeout-profile-action-btn';
+                btn.className = 'stakeout-profile-btn';
+                
+                // Style actionsHeader as flex container so Actions stays left and button floats right
+                actionsHeader.style.display = 'flex';
+                actionsHeader.style.justifyContent = 'space-between';
+                actionsHeader.style.alignItems = 'center';
+                actionsHeader.appendChild(btn);
+            } else {
+                // Priority 2: Inside the top links wrap or profile title bar (no column distortion)
+                const topContainer = document.querySelector('.links-top-wrap, .user-information .title-black, .user-information h4');
+                if (!topContainer) return;
+
+                btn = document.createElement('button');
+                btn.id = 'stakeout-profile-action-btn';
+                btn.className = 'stakeout-profile-btn';
+                topContainer.appendChild(btn);
+            }
+        }
+
+        const newText = isWatched ? `🎯 In Radar (Remove)` : `🎯 + Stakeout`;
+        const newTitle = isWatched ? `Target [${profileId}] is in Stakeout Radar. Click to remove.` : `Click to add target [${profileId}] to Stakeout Radar.`;
         const newClass = `stakeout-profile-btn ${isWatched ? 'active' : ''}`;
 
         if (btn.textContent !== newText) btn.textContent = newText;
         if (btn.className !== newClass) btn.className = newClass;
+        if (btn.title !== newTitle) btn.title = newTitle;
 
         btn.onclick = (e) => {
             e.preventDefault();
