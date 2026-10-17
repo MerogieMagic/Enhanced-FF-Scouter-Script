@@ -2075,8 +2075,48 @@ Extracted directly via Torn API stock market endpoints:
        - **Mobile Userscript (`tornpda_war_enhanced.user.js` v9.7 & `meta.js` v9.7)**: Mobile-optimized compact layout with responsive pills and touch-friendly execution alerts.
   - **Verification**:
     - Validated both scripts with `node --check` (both exited with code 0).
-  - **Date & Time**: 2026-10-17 14:25:00 +08:00
+#### Session 99
+- **Focus**: Design & Implementation of Torn City Mercenary Stakeout Radar Userscript (`torn_mercenary_stakeout.user.js` v1.00).
+  - **User Directive**:
+    - "i want to create a new script to be used for mercernary stakeouts so i will give you a player id, and i want to keep tracking when the person is okay, online etc"
+  - **Collaborative Requirements Alignment**:
+    - *Platform*: Browser Userscript (Tampermonkey/Violentmonkey) providing an in-game floating Stakeout Radar dock directly on `torn.com`.
+    - *Alert Triggers*: Fully toggleable trigger switches in a dedicated settings drawer:
+      1. Alert on Target Okay (Discharged / medded out from Hospital $\rightarrow$ attackable!)
+      2. Alert on Target Online (Offline $\rightarrow$ Online / Idle activity)
+      3. Alert on Target Flight Landing (Traveling $\rightarrow$ Okay or Abroad)
+      4. Alert on Full 100% HP (Life bar reaches full recovery)
+    - *Notification Suite*: Dual notification system:
+      1. Synthesized Web Audio alarm (high-priority harmonic chime for attackable target, ascending chirp for online activity)
+      2. Desktop push notifications (`GM_notification` / Web Notification API) with direct attack URL routing
+      3. Optional toggle: Auto-open pre-staged attack tab immediately when target becomes Okay
+    - *Target Scope*: Multi-target Watchlist manager supporting tracking of multiple contract player IDs simultaneously with persistent local storage.
+  - **Architectural Engineering Deliverables**:
+    1. *Dedicated Standalone Userscript (`torn_mercenary_stakeout.user.js` v1.00 & `meta.js` v1.00)*:
+       - Self-contained, lightweight userscript operating independently from the Fair Fight / War Sorter scripts.
+    2. *Floating Stakeout Radar Dock (`#torn-mercenary-dock`)*:
+       - **Minimized Pill**: Anchored at bottom-right (`🎯 Radar (N) • ⚡ X READY`) with a pulsing green glow when any monitored target becomes attackable.
+       - **Expanded Dashboard**: Modern dark tactical glassmorphism (`#0f172a`, `#1e293b`, `#3b82f6` accents).
+       - **Quick Target Ingestion Bar**: Allows pasting raw Player IDs (`732810`) or Profile URLs (`https://www.torn.com/profiles.php?XID=732810`) with automatic regex ID parsing.
+       - **Live Target Cards**:
+         - Header: Online/Idle/Offline dot + Player Name + ID + Level + link to profile + Remove `[✕]` button.
+         - Status Badge: Live hospital countdown timer (`🏥 Hosp: 08:42`), flight destination countdown (`✈️ Traveling to Switzerland (14:15)`), or flashing green `✅ OKAY — READY!`.
+         - Life Health Bar: Exact numeric readout + percentage (e.g. `❤️ 2,180 / 4,500 (48.4%)`).
+         - Action Button: Large green `⚔️ ATTACK TARGET ⚡ (READY!)` button leading straight to `page.php?sid=attack&user2ID=...`.
+    3. *Profile Page Quick-Add Integration*:
+       - Automatically detects when browsing any Torn player profile (`profiles.php?XID=...`) and injects a prominent `[ 🎯 Add to Stakeout Radar ]` / `[ 🎯 In Stakeout Radar (Click to Remove) ]` button into the profile header for 1-click contract ingestion.
+    4. *Synthesized Web Audio Engine (`playStakeoutAlarm`)*:
+       - Built using native Web Audio API oscillators (`AudioContext`), completely eliminating external audio file dependencies or CORS failures. Produces crisp, unmissable multi-frequency alarms.
+       - Includes a "🔊 Test Alarm Sound" button in the settings panel.
+    5. *Rate-Limiter & Rapid Hospital Polling Engine*:
+       - Built-in rolling 60-second rate limiter (hard cap at 90 calls/min, well under Torn's 100/min threshold).
+       - Sequential round-robin polling (every 5 seconds) across active watchlist targets.
+       - **High-Alert Rapid Polling Mode**: When any target's hospital discharge countdown enters the final 60 seconds, the engine automatically prioritizes that target so the exact second they are discharged or med out, the alarm sounds and attack staging triggers.
+  - **Verification**:
+    - Validated userscript syntax with `node --check torn_mercenary_stakeout.user.js` (exit code 0).
+  - **Date & Time**: 2026-10-17 14:45:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
 
 
 
