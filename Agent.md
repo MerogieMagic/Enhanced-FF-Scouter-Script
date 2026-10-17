@@ -2341,6 +2341,30 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 21:39:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 106
+- **Focus**: Torn API Key Tier Architecture, Permission Audit & OPSEC Best Practices for Mercenary Stakeout Radar.
+  - **User Directive**:
+    - "what level of key is needed for radar"
+  - **Architectural & Security Audit**:
+    1. *Required Endpoint & Selections*:
+       - The radar queries: `https://api.torn.com/user/{targetId}?selections=profile,basic&key={key}&comment=StakeoutRadar`.
+       - Selections requested:
+         - `basic`: returns `player_id`, `name`, `level`, `gender`, `status` (`state`, `description`, `until`, `details`, `color`).
+         - `profile`: returns `life` (`current`, `maximum`), `last_action` (`status`, `relative`, `timestamp`), `status`, `rank`.
+    2. *Torn City API Access Tier Matrix*:
+       | Key Level | Key Name | Radar Compatible? | Exposes Private Account Data? | Recommended? |
+       | :--- | :--- | :---: | :---: | :--- |
+       | **Level 1** | **Public Access (Public Info Only)** | **YES (100% Fully Functional)** | **NO** (0% risk; cannot see cash, items, events, or logs) | **⭐⭐⭐⭐⭐ Highest OPSEC Recommendation** |
+       | **Level 2** | **Minimal Access** | **YES** | Minimal (basic user logs) | Supported |
+       | **Level 3** | **Limited Access** | **YES** | Moderate (inventory, attacks, faction) | Supported (auto-inherited from FF Scouter if present) |
+       | **Level 4** | **Full Access** | **YES** | High (full read/write access to money/messages) | Unnecessary for Radar; not recommended for casual scripts |
+    3. *OPSEC Recommendation*:
+       - Because the radar queries other players' public states (hospital discharge, travel destinations, online dot, life bar), a **Public Access (Level 1)** key is completely sufficient and 100% operational.
+       - A Public Access key grants zero access to private assets, vaults, bazaars, inventory, messages, or logs, making it the safest possible credential to store in a browser userscript.
+  - **Date & Time**: 2026-10-17 21:55:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
 
