@@ -2184,6 +2184,47 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 15:03:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 102
+- **Focus**: Fixed Viewport Dock Docking, Time Remaining Rounding to Hours/Mins, and Unthrottled Web Worker Background Polling Architecture (`v1.03`).
+  - **User Directives**:
+    1. "UI should not be at the bottom of the page but the bottom of the user viewable screen."
+    2. "Also round time remaining to hours and mins, how does the tool get its update if im not on the page and it suddenly meds out"
+  - **Root Cause & Technical Analysis**:
+    1. *Viewport Dock Misalignment*:
+       - Root cause: In CSS, the dock was styled under `#torn-stakeout-dock`, but the runtime DOM element created in `renderRadarUI` had `dockRoot.id = 'torn-mercenary-dock'`.
+       - As a result of this selector mismatch, the element had no `position: fixed` applied and was rendered statically at the end of `document.body` (below the page footer), requiring the user to scroll down to view it.
+    2. *Time Remaining Format*:
+       - Previously, `formatCountdown(sec)` returned `MM:SS` (e.g. `135:00` for 2h 15m), which was unintuitive for multi-hour hospitalizations and travel.
+    3. *Background Polling & Med-Out Mechanics*:
+       - The tool queries Torn's REST API (`https://api.torn.com/user/{id}?selections=profile,basic&key={key}`) directly, not the profile DOM.
+       - When a player meds out, Torn's database updates their state from `Hospital` to `Okay` instantaneously.
+       - In browsers, `setInterval` on inactive or minimized tabs can be throttled by Chrome/Firefox down to 1 minute, potentially delaying detection when the user is tabbed out.
+  - **Engineering Deliverables Implemented**:
+    1. *Fixed-to-Viewport Tactical Dock*:
+       - Updated CSS to target both `#torn-mercenary-dock` and `#torn-stakeout-dock` with `position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 9999999 !important;`.
+       - Guarantees the dock floats persistently at the bottom-right of the user's viewable screen regardless of scrolling or page length.
+    2. *Rounded Time Remaining Formatting (`formatCountdown`)*:
+       - If `sec >= 3600` ($\ge 1$ hour): Formats as `${hours}h ${minutes}m` (e.g., `2h 15m`, `1h 0m`).
+       - If `60 <= sec < 3600`: Formats as `${minutes}m` (e.g., `45m`, `12m`).
+       - If `0 < sec < 60`: Formats as `${sec}s` (e.g., `45s`, `12s`) so players have exact countdown precision in the final minute before hospital discharge.
+       - If `sec <= 0`: Displays `Ready`.
+       - Added full precision hover tooltip: `title="Exact remaining: Xh Ym Zs"`.
+       - Updated `stateKey` cache guard to only re-render the card when the visible time label changes (once a minute during long hospital stays, and every second during the final minute), drastically cutting DOM thrash and CPU usage.
+    3. *Unthrottled Background Web Worker Ticker (`createBackgroundTicker`)*:
+       - Implemented an inline Blob Web Worker that runs on a separate OS thread, completely bypassing browser timer throttling for background and minimized tabs.
+       - Gracefully falls back to `setInterval` if Web Workers are restricted by CSP.
+    4. *AudioContext User Interaction Warm-Up*:
+       - Maintains a persistent `sharedAudioCtx` that resumes automatically on any user gesture across Torn (`click`, `keydown`, `touchstart`).
+       - Ensures Web Audio alarms sound with zero latency even when the tab is in the background.
+    5. *Files Updated & Version Bump*:
+       - `torn_mercenary_stakeout.user.js` (bumped to **v1.03**)
+       - `torn_mercenary_stakeout.meta.js` (bumped to **v1.03**)
+  - **Verification**:
+    - Syntax verification via `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-17 15:08:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
 

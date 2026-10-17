@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.02
+// @version      1.03
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -23,7 +23,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.02";
+    const SCRIPT_VERSION = "1.03";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -244,12 +244,36 @@
     }
 
     // --- 3. AUDIO ENGINE (Synthesized Web Audio API) ---
+    let sharedAudioCtx = null;
+    function getAudioCtx() {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return null;
+            if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+                sharedAudioCtx = new AudioCtx();
+            }
+            if (sharedAudioCtx.state === 'suspended') {
+                sharedAudioCtx.resume().catch(() => {});
+            }
+            return sharedAudioCtx;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Warm-up AudioContext on user interaction across Torn
+    ['click', 'keydown', 'touchstart'].forEach(evt => {
+        window.addEventListener(evt, () => {
+            try { getAudioCtx(); } catch (e) {}
+        }, { once: false, passive: true });
+    });
+
     function playStakeoutAlarm(type = 'okay') {
         if (!config.soundAlarm) return;
         try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!AudioCtx) return;
-            const ctx = new AudioCtx();
+            const ctx = getAudioCtx();
+            if (!ctx) return;
+            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
             if (type === 'okay') {
                 const osc1 = ctx.createOscillator();
@@ -425,11 +449,12 @@
 
     // --- 7. STYLES ---
     safeAddStyle(`
+        #torn-mercenary-dock,
         #torn-stakeout-dock {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 999999;
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 9999999 !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
             user-select: none;
         }
@@ -1000,10 +1025,15 @@
     }
 
     function formatCountdown(sec) {
-        if (sec <= 0) return '00:00';
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        if (sec <= 0) return 'Ready';
+        if (sec < 60) return `${sec}s`;
+        const totalMin = Math.floor(sec / 60);
+        const hours = Math.floor(totalMin / 60);
+        const minutes = totalMin % 60;
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
     }
 
     function updateTargetCardUI(targetId) {
@@ -1032,8 +1062,12 @@
         const nowSec = Math.floor(Date.now() / 1000);
         const remainingSec = d.until > nowSec ? d.until - nowSec : 0;
         const isOkay = d.state === 'Okay';
+        const formattedTime = formatCountdown(remainingSec);
+        const exactTooltip = remainingSec > 0
+            ? `${Math.floor(remainingSec / 3600)}h ${Math.floor((remainingSec % 3600) / 60)}m ${remainingSec % 60}s`
+            : 'Ready';
 
-        const stateKey = `${d.state}_${remainingSec}_${d.hpCurr}_${d.hpMax}_${d.online}`;
+        const stateKey = `${d.state}_${formattedTime}_${d.hpCurr}_${d.hpMax}_${d.online}`;
         if (card.dataset.lastStateKey === stateKey) return;
         card.dataset.lastStateKey = stateKey;
 
@@ -1041,13 +1075,13 @@
 
         let statusBadge = '';
         if (d.state === 'Hospital') {
-            statusBadge = `<span class="stakeout-status-pill hospital">🏥 Hosp: ${formatCountdown(remainingSec)}</span>`;
+            statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
         } else if (d.state === 'Traveling') {
-            statusBadge = `<span class="stakeout-status-pill traveling">✈️ ${d.desc || 'Traveling'} (${formatCountdown(remainingSec)})</span>`;
+            statusBadge = `<span class="stakeout-status-pill traveling" title="Exact remaining: ${exactTooltip}">✈️ ${d.desc || 'Traveling'} (${formattedTime})</span>`;
         } else if (d.state === 'Abroad') {
             statusBadge = `<span class="stakeout-status-pill abroad">🌍 ${d.desc || 'Abroad'}</span>`;
         } else if (d.state === 'Jail') {
-            statusBadge = `<span class="stakeout-status-pill hospital">🚔 Jail: ${formatCountdown(remainingSec)}</span>`;
+            statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🚔 Jail: ${formattedTime}</span>`;
         } else {
             statusBadge = `<span class="stakeout-status-pill okay">✅ OKAY — READY!</span>`;
         }
@@ -1165,6 +1199,41 @@
         await pollSingleTarget(targetToPoll);
     }
 
+    // --- 10.1 UNTHROTTLED BACKGROUND TICKER (Web Worker) ---
+    // Browsers aggressively throttle window.setInterval (down to 1 call/min) when tabs are unfocused.
+    // A Blob Web Worker runs on an unthrottled worker thread, ensuring the 5-second API polling
+    // continues uninterrupted even when Torn is minimized or in the background.
+    function createBackgroundTicker(intervalMs, callback) {
+        try {
+            const blobCode = `
+                let timer = null;
+                self.onmessage = function(e) {
+                    if (e.data === 'start') {
+                        if (timer) clearInterval(timer);
+                        timer = setInterval(function() { self.postMessage('tick'); }, ${intervalMs});
+                    } else if (e.data === 'stop') {
+                        if (timer) clearInterval(timer);
+                        timer = null;
+                    }
+                };
+            `;
+            const blob = new Blob([blobCode], { type: 'application/javascript' });
+            const worker = new Worker(URL.createObjectURL(blob));
+            worker.onmessage = function (e) {
+                if (e.data === 'tick') callback();
+            };
+            worker.postMessage('start');
+            return worker;
+        } catch (e) {
+            console.warn('[Stakeout] Web Worker fallback to setInterval:', e);
+            const intervalId = setInterval(callback, intervalMs);
+            return {
+                terminate: () => clearInterval(intervalId),
+                postMessage: () => {}
+            };
+        }
+    }
+
     function boot() {
         if (!document.body) {
             setTimeout(boot, 100);
@@ -1187,8 +1256,8 @@
             }
         }, 2000);
 
-        // Main poller
-        setInterval(pollNextWatchlistTarget, (config.pollingInterval || 5) * 1000);
+        // Main unthrottled poller (Web Worker with fallback)
+        createBackgroundTicker((config.pollingInterval || 5) * 1000, pollNextWatchlistTarget);
 
         // Initial fetch for all targets
         if (watchlist.length > 0) {
