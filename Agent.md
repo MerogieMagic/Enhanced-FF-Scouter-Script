@@ -2258,8 +2258,52 @@ Extracted directly via Torn API stock market endpoints:
        - `torn_mercenary_stakeout.meta.js` (bumped to **v1.04**)
   - **Verification**:
     - Validated syntax with `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
-  - **Date & Time**: 2026-10-17 15:33:00 +08:00
+#### Session 104
+- **Focus**: Multi-Account API Key Engine, Auto-Detection, Seamless Inheritance & In-Game Key Management UI (`v1.05`).
+  - **User Directive**:
+    - "which API key does it use"
+  - **Architectural Discovery & Technical Analysis**:
+    1. *API Permission Scope & Safety*:
+       - The Mercenary Stakeout Radar queries Torn API's `user/{id}?selections=profile,basic`.
+       - In Torn City, both `profile` and `basic` are **Public Information** endpoints.
+       - Therefore, **any valid Torn API key** (Public, Minimal, Limited, or Full Access) from **any account** can poll targets, retrieve exact life HP bars, and detect hospital / online transitions.
+    2. *Multi-Account Landscape*:
+       - Player operates multiple accounts:
+         - Main: **Merogie** [`4054802`]
+         - Associated: **AmberTJY** [`4540646`]
+         - Associated: **AutumnYeQiu** [`4570597`]
+       - When switching accounts, users scripts must avoid cross-polluting keys or failing due to missing account-specific credentials.
+    3. *Zero-Configuration Key Inheritance*:
+       - The user already runs **FF Scouter V2 + BS Estimates** and **Torn War Stuff Enhanced (TWSE)**, which store keys in `localStorage` under keys like `limited_key`, `limited_key_{uid}`, `twse-config-apikey`, and `torn_api_key`.
+       - Previously, the radar only checked a few unindexed fallback strings, without informing the user which key was active or which account was detected.
+  - **Engineering Deliverables Implemented**:
+    1. *Account-Aware Dynamic Resolution Engine (`getApiKeyDetails()`)*:
+       - Detects logged-in character ID via `#torn-user` JSON payload or native sidebar profile link (`profiles.php?XID=...`).
+       - Resolves active API key via a strict 4-tier hierarchy:
+         1. **Tier 1 (Account-Specific Stakeout Key)**: `api_key_{uid}` or `limited_key_{uid}` in script storage.
+         2. **Tier 2 (Global Stakeout Key)**: `api_key` in script storage.
+         3. **Tier 3 (Inherited Account Key from FF Scouter / TWSE)**: `limited_key_{uid}` or `ff_twse_limited_key_{uid}` in browser `localStorage`.
+         4. **Tier 4 (Inherited Global Key from FF Scouter / TWSE)**: `twse-config-apikey`, `limited_key`, or `torn_api_key` in browser `localStorage`.
+       - Returns a structured descriptor `{ key, source, uid, isCustom }`.
+    2. *In-Dock Radar Settings UI (`#stakeout-settings-panel`)*:
+       - Injected a dedicated **🔑 Torn API Key** card inside the radar's settings drawer:
+         - Displays masked key for OPSEC (`bciQ••••uJ` or `Not Configured`).
+         - Displays source descriptor (`Inherited FF Scouter (Acc 4570597)`, `Stakeout Custom (Acc 4054802)`, etc.).
+         - Displays detected active account ID (`[4054802]`).
+         - Provides a 1-click `[ Change Key ]` button opening an account-tailored prompt that saves both per-account and global fallback.
+    3. *Extension Menu Command (`GM_registerMenuCommand`)*:
+       - Wired `🔑 Set / Change Torn API Key` to `promptSetApiKey`, automatically detecting current account ID and saving per-account.
+    4. *Invalid Key & Missing Key Telemetry Warnings*:
+       - If no key is detected across all tiers, the empty radar display explicitly alerts: `⚠️ API Key Missing! Click ⚙ (Settings) > "Change Key" to start scanning.`
+       - If Torn API returns error code 2 (Incorrect Key), triggers an instant toast alert: `⚠️ Invalid Torn API Key! Click ⚙ in Radar to update.`
+    5. *Files Updated & Version Bump*:
+       - `torn_mercenary_stakeout.user.js` (bumped to **v1.05**)
+       - `torn_mercenary_stakeout.meta.js` (bumped to **v1.05**)
+  - **Verification**:
+    - Validated syntax with `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-17 16:46:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
 
 
 

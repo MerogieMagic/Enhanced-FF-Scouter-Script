@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.04
+// @version      1.05
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -23,7 +23,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.04";
+    const SCRIPT_VERSION = "1.05";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -189,12 +189,95 @@
         } catch (e) {}
     }
 
+    function getCurrentUserId() {
+        try {
+            const input = document.getElementById('torn-user');
+            if (input && input.value) {
+                const parsed = JSON.parse(input.value);
+                if (parsed && parsed.id) return String(parsed.id);
+            }
+        } catch (e) {}
+        try {
+            const sidebar = document.querySelector('a[href*="profiles.php?XID="]');
+            const m = sidebar?.href?.match(/XID=(\d+)/);
+            if (m) return m[1];
+        } catch (e) {}
+        return null;
+    }
+
+    function getApiKeyDetails() {
+        const uid = getCurrentUserId();
+        // 1. Account-specific key configured for stakeout
+        if (uid) {
+            const accStakeout = getStorage(`api_key_${uid}`, null);
+            if (accStakeout && typeof accStakeout === 'string' && !accStakeout.startsWith('###')) {
+                return { key: accStakeout.trim(), source: `Stakeout Custom (Acc ${uid})`, uid, isCustom: true };
+            }
+            const accLimited = getStorage(`limited_key_${uid}`, null);
+            if (accLimited && typeof accLimited === 'string' && !accLimited.startsWith('###')) {
+                return { key: accLimited.trim(), source: `Stakeout Limited (Acc ${uid})`, uid, isCustom: true };
+            }
+        }
+
+        // 2. Global key configured for stakeout
+        const globalStakeout = getStorage('api_key', null);
+        if (globalStakeout && typeof globalStakeout === 'string' && !globalStakeout.startsWith('###')) {
+            return { key: globalStakeout.trim(), source: 'Stakeout Global Key', uid, isCustom: true };
+        }
+
+        // 3. Inherit account-specific key from FF Scouter / TWSE
+        if (uid) {
+            const localAccKey = localStorage.getItem(`limited_key_${uid}`) || localStorage.getItem(`ff_twse_limited_key_${uid}`);
+            if (localAccKey && typeof localAccKey === 'string' && !localAccKey.startsWith('###')) {
+                return { key: localAccKey.trim(), source: `Inherited FF Scouter (Acc ${uid})`, uid, isCustom: false };
+            }
+        }
+
+        // 4. Inherit global key from FF Scouter / TWSE / TornPDA
+        const fallbackCandidates = [
+            { k: getStorage('limited_key', null), name: 'Stakeout Limited Key' },
+            { k: localStorage.getItem('twse-config-apikey'), name: 'Inherited TWSE Key' },
+            { k: localStorage.getItem('limited_key'), name: 'Inherited FF Scouter Key' },
+            { k: localStorage.getItem('torn_api_key'), name: 'Inherited Torn API Key' }
+        ];
+        for (const item of fallbackCandidates) {
+            if (item.k && typeof item.k === 'string' && !item.k.startsWith('###')) {
+                return { key: item.k.trim(), source: item.name, uid, isCustom: false };
+            }
+        }
+
+        return { key: '', source: 'No API Key Found', uid, isCustom: false };
+    }
+
     function getApiKey() {
-        return getStorage('api_key', '') ||
-               getStorage('limited_key', '') ||
-               localStorage.getItem('twse-config-apikey') ||
-               localStorage.getItem('limited_key') ||
-               localStorage.getItem('torn_api_key') || '';
+        return getApiKeyDetails().key;
+    }
+
+    function maskApiKey(key) {
+        if (!key || typeof key !== 'string') return 'Not Configured';
+        if (key.length <= 8) return '••••••••';
+        return `${key.slice(0, 4)}••••${key.slice(-4)}`;
+    }
+
+    function promptSetApiKey() {
+        const uid = getCurrentUserId();
+        const curDetails = getApiKeyDetails();
+        const accountLabel = uid ? `Logged-in Account [${uid}]` : 'Global Profile';
+        const msg = `🔑 Set Torn API Key for Mercenary Stakeout Radar\n\n` +
+                    `Current Active: ${maskApiKey(curDetails.key)} (${curDetails.source})\n` +
+                    `Target: ${accountLabel}\n\n` +
+                    `Enter 16-character Torn API Key (Public, Minimal, Limited, or Full access):`;
+
+        const input = prompt(msg, curDetails.key);
+        if (input !== null) {
+            const cleanKey = input.trim();
+            if (uid) {
+                setStorage(`api_key_${uid}`, cleanKey);
+            }
+            setStorage('api_key', cleanKey);
+            showStakeoutToast(cleanKey ? `✅ API Key saved for ${accountLabel}!` : '⚠️ API Key removed.');
+            renderRadarUI();
+        }
     }
 
     // --- 2. CONFIGURATION & STATE ---
@@ -368,6 +451,9 @@
             const data = await res.json();
             if (data && data.error) {
                 console.error('[Stakeout] API error:', data.error);
+                if (data.error.code === 2) {
+                    showStakeoutToast('⚠️ Invalid Torn API Key! Click ⚙ in Radar to update.');
+                }
                 return { error: data.error.error || 'API Error', code: data.error.code };
             }
             return data;
@@ -893,6 +979,7 @@
         }
 
         const callRate = getApiCallRate();
+        const keyDetails = getApiKeyDetails();
         dockRoot.innerHTML = `
             <div class="stakeout-window">
                 <div class="stakeout-header">
@@ -947,6 +1034,19 @@
                         <span>Auto-Open Attack Tab (Online & Okay)</span>
                         <input type="checkbox" id="toggle-auto-attack" ${config.autoOpenAttack ? 'checked' : ''} />
                     </label>
+
+                    <div style="border-top: 1px solid #334155; margin-top: 4px; padding-top: 6px;">
+                        <div style="font-weight: 800; color: #f8fafc; margin-bottom: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>🔑 Torn API Key</span>
+                            <button class="stakeout-btn-icon" id="stakeout-btn-set-key" style="padding: 2px 8px; font-size: 10px; border-color: #38bdf8; color: #38bdf8;" title="Configure Torn API Key">Change Key</button>
+                        </div>
+                        <div style="font-size: 10.5px; color: #94a3b8; line-height: 1.4;">
+                            <div>Active: <strong style="color: ${keyDetails.key ? '#38bdf8' : '#ef4444'}; font-family: monospace;">${maskApiKey(keyDetails.key)}</strong></div>
+                            <div>Source: <span style="color: #cbd5e1;">${keyDetails.source}</span></div>
+                            ${keyDetails.uid ? `<div style="color: #64748b;">Logged-in User ID: [${keyDetails.uid}]</div>` : ''}
+                        </div>
+                    </div>
+
                     <div style="display: flex; gap: 6px; margin-top: 4px;">
                         <button class="stakeout-btn-icon" id="stakeout-btn-test-sound" style="flex: 1; padding: 5px;" title="Test Synthesized Alarm Sound">🔊 Test Sound</button>
                         <button class="stakeout-btn-icon" id="stakeout-btn-check-update" style="flex: 1; padding: 5px; border-color: #38bdf8; color: #38bdf8;" title="Check GitHub for Script Updates">🔄 Check Updates</button>
@@ -958,7 +1058,7 @@
                 </div>
 
                 <div class="stakeout-list" id="stakeout-target-list">
-                    ${watchlist.length === 0 ? '<div class="stakeout-empty">No targets on watchlist.<br>Add an ID above or click "🎯 Stakeout" on any profile!</div>' : ''}
+                    ${watchlist.length === 0 ? `<div class="stakeout-empty">${!keyDetails.key ? '<span style="color: #f87171; font-weight: 700;">⚠️ API Key Missing!</span><br>Click ⚙ (Settings) &gt; "Change Key" to start scanning.<br><br>' : ''}No targets on watchlist.<br>Add an ID above or click "🎯 Stakeout" on any profile!</div>` : ''}
                 </div>
             </div>
         `;
@@ -1023,6 +1123,9 @@
 
         const checkUpdateBtn = document.getElementById('stakeout-btn-check-update');
         if (checkUpdateBtn) checkUpdateBtn.onclick = () => checkForScriptUpdates(true);
+
+        const setKeyBtn = document.getElementById('stakeout-btn-set-key');
+        if (setKeyBtn) setKeyBtn.onclick = promptSetApiKey;
 
         const inputEl = document.getElementById('stakeout-input-target');
         const addBtn = document.getElementById('stakeout-btn-add');
@@ -1347,14 +1450,7 @@
             saveConfig();
             renderRadarUI();
         });
-        GM_registerMenuCommand('🔑 Set / Change Torn API Key', () => {
-            const curKey = getApiKey();
-            const input = prompt('Enter Torn API Key for Mercenary Stakeout Radar:', curKey);
-            if (input !== null) {
-                setStorage('api_key', input.trim());
-                showStakeoutToast('API Key saved successfully!');
-            }
-        });
+        GM_registerMenuCommand('🔑 Set / Change Torn API Key', promptSetApiKey);
     }
 
     if (document.readyState === 'loading') {
