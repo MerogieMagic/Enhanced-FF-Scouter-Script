@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      3.02
+// @version      3.03
 // @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = "3.02";
+    const SCRIPT_VERSION = "3.03";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -36,6 +36,8 @@
     const memberCountdowns = {}; // userID -> { until: unixSec, state: string, desc: string, lastAction: string }
     const memberStatusMap = {};   // userID -> parsed member object from Torn API
     const memberLastAction = {};  // userID -> last action string
+    const targetLifeData = {};    // targetID -> { current: number, maximum: number, name: string }
+    let myMaxHp = null;
     let apiCallInProgress = false;
 
     // --- PDA / GM API Polyfills ---
@@ -123,9 +125,13 @@
     let myTotalBattleStats = parseFloat(rD_getValue(currentUserId ? `my_bs_${currentUserId}` : 'my_bs', '0')) || null;
 
     async function fetchMyBattleStats() {
-        if (!apiKey || myTotalBattleStats) return;
+        if (!apiKey) return;
         try {
-            const url = `https://api.torn.com/user/?selections=battlestats&key=${apiKey}&comment=FFScouterSelf`;
+            const needBs = !myTotalBattleStats;
+            const needHp = !rD_getValue(currentUserId ? `my_max_hp_${currentUserId}` : 'my_max_hp');
+            if (!needBs && !needHp) return;
+
+            const url = `https://api.torn.com/user/?selections=battlestats,bars&key=${apiKey}&comment=FFScouterSelf`;
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
@@ -133,6 +139,14 @@
                     myTotalBattleStats = data.total;
                     if (currentUserId) rD_setValue(`my_bs_${currentUserId}`, String(data.total));
                     rD_setValue('my_bs', String(data.total));
+                }
+                if (data && data.life && data.life.maximum) {
+                    const hp = parseInt(data.life.maximum, 10);
+                    if (hp > 0) {
+                        myMaxHp = hp;
+                        if (currentUserId) rD_setValue(`my_max_hp_${currentUserId}`, String(hp));
+                        rD_setValue('my_max_hp', String(hp));
+                    }
                 }
             }
         } catch (e) {}
@@ -643,6 +657,168 @@
         .twse-copy-btn:hover {
             opacity: 1 !important;
             color: #38bdf8 !important;
+        }
+
+        /* --- Absolute HP Tracking & Combat HUD --- */
+        .ff-player-hp-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            margin-left: auto !important;
+            padding: 2px 8px !important;
+            border-radius: 4px !important;
+            font-family: 'Roboto Mono', monospace, sans-serif !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            line-height: 1.2 !important;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9) !important;
+            white-space: nowrap !important;
+            user-select: none !important;
+            transition: all 0.2s ease !important;
+            z-index: 10 !important;
+        }
+
+        .ff-player-hp-badge.high {
+            background: rgba(22, 101, 52, 0.5) !important;
+            border: 1px solid rgba(34, 197, 94, 0.6) !important;
+            color: #4ade80 !important;
+        }
+
+        .ff-player-hp-badge.warning {
+            background: rgba(161, 98, 7, 0.5) !important;
+            border: 1px solid rgba(234, 179, 8, 0.6) !important;
+            color: #facc15 !important;
+        }
+
+        .ff-player-hp-badge.danger {
+            background: rgba(153, 27, 27, 0.6) !important;
+            border: 1px solid #ef4444 !important;
+            color: #fca5a5 !important;
+            animation: ffExecuteGlow 1.2s infinite ease-in-out !important;
+        }
+
+        .ff-player-hp-badge.dead {
+            background: rgba(30, 41, 59, 0.7) !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+            color: #94a3b8 !important;
+        }
+
+        .ff-hp-pct {
+            opacity: 0.85 !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+        }
+
+        /* Tactical Top Combat HUD */
+        .ff-attack-hp-hud {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            margin: 6px 0 10px 0 !important;
+            padding: 6px 14px !important;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.92) 100%) !important;
+            border: 1px solid rgba(71, 85, 105, 0.5) !important;
+            border-radius: 6px !important;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5) !important;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            clear: both !important;
+        }
+
+        .ff-hud-fighter {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            color: #f1f5f9 !important;
+        }
+
+        .ff-hud-vs {
+            font-size: 12px !important;
+            font-weight: 900 !important;
+            letter-spacing: 1px !important;
+            color: #94a3b8 !important;
+            padding: 0 8px !important;
+        }
+
+        .ff-hud-hp-pill {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            padding: 2px 7px !important;
+            border-radius: 4px !important;
+            font-family: monospace, monospace !important;
+            font-size: 12px !important;
+            font-weight: 800 !important;
+        }
+
+        .ff-hud-hp-pill.high {
+            background: rgba(34, 197, 94, 0.2) !important;
+            border: 1px solid rgba(34, 197, 94, 0.4) !important;
+            color: #4ade80 !important;
+        }
+
+        .ff-hud-hp-pill.warning {
+            background: rgba(234, 179, 8, 0.2) !important;
+            border: 1px solid rgba(234, 179, 8, 0.4) !important;
+            color: #facc15 !important;
+        }
+
+        .ff-hud-hp-pill.danger {
+            background: rgba(239, 68, 68, 0.25) !important;
+            border: 1px solid rgba(239, 68, 68, 0.5) !important;
+            color: #f87171 !important;
+            animation: ffExecuteGlow 1.2s infinite ease-in-out !important;
+        }
+
+        .ff-hud-hp-pill.dead {
+            background: rgba(148, 163, 184, 0.15) !important;
+            border: 1px solid rgba(148, 163, 184, 0.3) !important;
+            color: #94a3b8 !important;
+        }
+
+        .ff-hud-execute-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 3px !important;
+            background: #dc2626 !important;
+            color: #ffffff !important;
+            font-size: 10px !important;
+            font-weight: 900 !important;
+            padding: 1px 5px !important;
+            border-radius: 3px !important;
+            letter-spacing: 0.5px !important;
+            animation: ffExecuteGlow 0.8s infinite ease-in-out !important;
+        }
+
+        @keyframes ffExecuteGlow {
+            0% { box-shadow: 0 0 3px #ef4444; }
+            50% { box-shadow: 0 0 10px #ef4444, 0 0 4px #dc2626; }
+            100% { box-shadow: 0 0 3px #ef4444; }
+        }
+
+        @media (max-width: 600px) {
+            .ff-attack-hp-hud {
+                padding: 4px 8px !important;
+                font-size: 11px !important;
+                gap: 4px !important;
+            }
+            .ff-hud-fighter {
+                font-size: 11px !important;
+            }
+            .ff-hud-hp-pill {
+                font-size: 10.5px !important;
+                padding: 1px 5px !important;
+            }
+            .ff-player-hp-badge {
+                font-size: 10px !important;
+                padding: 1px 5px !important;
+            }
         }
 
         .ff-scouter-mini-ff {
@@ -1481,19 +1657,34 @@
         
         const nowSec = Math.floor(Date.now() / 1000);
         let cached = memberCountdowns[target_id];
-        if ((!cached || !cached.until || cached.until < nowSec) && apiKey) {
+        const cachedLife = targetLifeData[target_id] || getCachedTargetLife(target_id);
+
+        if ((!cached || !cached.until || cached.until < nowSec || !cachedLife) && apiKey) {
             attackStatusFetchInProgress = true;
             try {
                 const url = `https://api.torn.com/user/${target_id}?selections=profile,basic&key=${apiKey}&comment=FFScouterAttack`;
                 const res = await fetch(url);
                 if (res.ok) {
                     const data = await res.json();
-                    if (data && data.status) {
-                        const until = parseInt(data.status.until || '0', 10);
-                        const state = data.status.state || '';
-                        const desc = data.status.description || '';
-                        const lastAction = data.last_action?.relative || '';
-                        memberCountdowns[target_id] = { until, state, desc, lastAction };
+                    if (data) {
+                        if (data.status) {
+                            const until = parseInt(data.status.until || '0', 10);
+                            const state = data.status.state || '';
+                            const desc = data.status.description || '';
+                            const lastAction = data.last_action?.relative || '';
+                            memberCountdowns[target_id] = { until, state, desc, lastAction };
+                        }
+                        if (data.life && data.life.maximum) {
+                            targetLifeData[target_id] = {
+                                current: parseInt(data.life.current, 10) || 0,
+                                maximum: parseInt(data.life.maximum, 10) || 0,
+                                name: data.name || ''
+                            };
+                            try {
+                                rD_setValue(`target_life_${target_id}`, JSON.stringify(targetLifeData[target_id]));
+                            } catch (e) {}
+                            updateAttackHpDisplay();
+                        }
                     }
                 }
             } catch (e) {
@@ -1503,6 +1694,352 @@
             }
         }
         updateAttackPageHospTimer(target_id);
+        updateAttackHpDisplay();
+    }
+
+    // --- Absolute HP Engine (Fight Screen) ---
+    function getAttackTargetId() {
+        const m = window.location.href.match(/user2ID=(\d+)/);
+        return m ? m[1] : null;
+    }
+
+    function getMyPlayerName() {
+        try {
+            const userEl = document.getElementById('torn-user');
+            if (userEl && userEl.value) {
+                const data = JSON.parse(userEl.value);
+                if (data.playername) return data.playername;
+            }
+        } catch (e) {}
+        const nameEl = document.querySelector('[class*="menu-info-name"], [class*="userName___"], #sidebar a[href*="profiles.php"]');
+        if (nameEl) {
+            const t = nameEl.textContent.trim();
+            if (t) return t;
+        }
+        return 'Merogie';
+    }
+
+    function getAttackerMaxHp() {
+        // 1. Check DOM barLife
+        const barLife = document.getElementById('barLife') || document.querySelector('[class*="bar-life"]');
+        if (barLife) {
+            const text = barLife.textContent || '';
+            const m = text.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
+            if (m) {
+                const max = parseInt(m[2].replace(/,/g, ''), 10);
+                if (max > 0) {
+                    if (currentUserId) rD_setValue(`my_max_hp_${currentUserId}`, String(max));
+                    rD_setValue('my_max_hp', String(max));
+                    return max;
+                }
+            }
+        }
+        // 2. Persistent storage
+        const cached = rD_getValue(currentUserId ? `my_max_hp_${currentUserId}` : 'my_max_hp');
+        if (cached) {
+            const val = parseInt(cached, 10);
+            if (val > 0) return val;
+        }
+        return 3937;
+    }
+
+    function getCachedTargetLife(targetId) {
+        if (!targetId) return null;
+        try {
+            const stored = rD_getValue(`target_life_${targetId}`);
+            if (stored) return JSON.parse(stored);
+        } catch (e) {}
+        return null;
+    }
+
+    function findFighterCards() {
+        let attackerCard = document.getElementById('attacker') || 
+                           document.querySelector('[class*="attacker___"], [class*="player___"][class*="user___"]');
+        let defenderCard = document.getElementById('defender') || 
+                           document.querySelector('[class*="defender___"], [class*="player___"][class*="opponent___"]');
+
+        const players = Array.from(document.querySelectorAll('[class*="player___"], [class*="playerWindow___"], [class*="player-window"]'));
+        if (players.length >= 2) {
+            if (!attackerCard) attackerCard = players[0];
+            if (!defenderCard) defenderCard = players[1];
+        }
+
+        // Secondary verification via player names
+        const myName = getMyPlayerName();
+        const targetId = getAttackTargetId();
+        const targetLife = targetId ? (targetLifeData[targetId] || getCachedTargetLife(targetId)) : null;
+        const targetName = targetLife?.name;
+
+        if (attackerCard && defenderCard && myName && targetName) {
+            const attText = attackerCard.textContent || '';
+            const defText = defenderCard.textContent || '';
+            if (!attText.includes(myName) && defText.includes(myName)) {
+                const tmp = attackerCard;
+                attackerCard = defenderCard;
+                defenderCard = tmp;
+            }
+        }
+
+        return { attackerCard, defenderCard };
+    }
+
+    function extractLifePercent(cardEl) {
+        if (!cardEl) return null;
+
+        const barCandidates = cardEl.querySelectorAll(
+            '[class*="life___"], [class*="health___"], [class*="progress___"], [class*="statusBar___"], [role="progressbar"]'
+        );
+
+        for (const bar of barCandidates) {
+            if (bar.closest('[class*="weapon___"], [class*="equip___"], [class*="item___"], [class*="cooldown___"], .ff-player-hp-badge, .ff-attack-hp-hud')) continue;
+
+            const fills = [bar, ...bar.querySelectorAll('[class*="fill___"], [class*="filler___"], div')];
+            for (const el of fills) {
+                const w = el.style && el.style.width;
+                if (w && w.includes('%')) {
+                    const m = w.match(/([\d.]+)%/);
+                    if (m) {
+                        const val = parseFloat(m[1]);
+                        if (!isNaN(val) && val >= 0 && val <= 100) return val;
+                    }
+                }
+                const transform = el.style && el.style.transform;
+                if (transform && transform.includes('scaleX')) {
+                    const m = transform.match(/scaleX\(([\d.]+)\)/);
+                    if (m) {
+                        const val = parseFloat(m[1]) * 100;
+                        if (!isNaN(val) && val >= 0 && val <= 100) return val;
+                    }
+                }
+            }
+        }
+
+        const allFills = cardEl.querySelectorAll('div[style*="width"], [role="progressbar"]');
+        for (const el of allFills) {
+            if (el.closest('[class*="weapon___"], [class*="equip___"], [class*="item___"], [class*="cooldown___"], .ff-player-hp-badge, .ff-attack-hp-hud')) continue;
+            const w = el.style && el.style.width;
+            if (w && w.includes('%')) {
+                const m = w.match(/([\d.]+)%/);
+                if (m) {
+                    const val = parseFloat(m[1]);
+                    if (!isNaN(val) && val >= 0 && val <= 100) return val;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function extractHpText(cardEl) {
+        if (!cardEl) return null;
+        const textElements = cardEl.querySelectorAll('span, div, p');
+        for (const el of textElements) {
+            if (el.closest('.ff-player-hp-badge, .ff-attack-hp-hud, .ff-countdown-digits, [class*="weapon___"]')) continue;
+            const txt = (el.textContent || '').trim();
+            const m = txt.match(/^(\d[\d,]*)\s*\/\s*(\d[\d,]*)$/);
+            if (m) {
+                const curr = parseInt(m[1].replace(/,/g, ''), 10);
+                const max = parseInt(m[2].replace(/,/g, ''), 10);
+                if (!isNaN(curr) && !isNaN(max) && max > 0 && curr <= max * 1.5) {
+                    return { current: curr, maximum: max, percent: (curr / max) * 100, exactFromDom: true };
+                }
+            }
+        }
+        return null;
+    }
+
+    function getFighterHpInfo(cardEl, knownMaxHp, isAttacker) {
+        if (!cardEl) return null;
+
+        const fromText = extractHpText(cardEl);
+        if (fromText) return fromText;
+
+        const percent = extractLifePercent(cardEl);
+        if (percent === null) {
+            if (knownMaxHp > 0) {
+                return { current: knownMaxHp, maximum: knownMaxHp, percent: 100, exactFromDom: false };
+            }
+            return null;
+        }
+
+        const max = knownMaxHp || (isAttacker ? getAttackerMaxHp() : 0);
+        let curr = max > 0 ? Math.round((percent / 100) * max) : 0;
+        if (percent <= 0) curr = 0;
+        if (percent >= 100 && max > 0) curr = max;
+
+        return {
+            current: curr,
+            maximum: max,
+            percent: percent,
+            exactFromDom: false
+        };
+    }
+
+    function updateFighterHpBadge(cardEl, hpInfo, fighterName) {
+        if (!cardEl || !hpInfo) return;
+
+        const headerEl = cardEl.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]') || cardEl;
+        if (headerEl && headerEl !== cardEl) {
+            headerEl.style.display = 'flex';
+            headerEl.style.alignItems = 'center';
+            headerEl.style.justifyContent = 'space-between';
+        }
+
+        let badge = cardEl.querySelector('.ff-player-hp-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'ff-player-hp-badge';
+            if (headerEl && headerEl !== cardEl) {
+                headerEl.appendChild(badge);
+            } else {
+                cardEl.prepend(badge);
+            }
+        }
+
+        const pct = hpInfo.percent;
+        let tierClass = 'high';
+        let executeBadge = '';
+
+        if (pct <= 0) {
+            tierClass = 'dead';
+        } else if (pct <= 20) {
+            tierClass = 'danger';
+            executeBadge = '<span class="ff-hud-execute-badge">⚔️ EXECUTE</span>';
+        } else if (pct < 50) {
+            tierClass = 'warning';
+        }
+
+        badge.className = `ff-player-hp-badge ${tierClass}`;
+
+        let hpDisplay = '';
+        if (hpInfo.maximum > 0) {
+            const pctStr = pct.toFixed(pct % 1 === 0 ? 0 : 1);
+            hpDisplay = `${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()} <span class="ff-hp-pct">(${pctStr}%)</span>`;
+        } else {
+            hpDisplay = `${pct.toFixed(pct % 1 === 0 ? 0 : 1)}% HP`;
+        }
+
+        badge.innerHTML = `
+            <span class="ff-hp-val">❤️ ${hpDisplay}</span>
+            ${executeBadge}
+        `;
+    }
+
+    function updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName) {
+        const attackRoot = document.getElementById('attack-root') || document.querySelector('.content-wrapper') || document.getElementById('mainContainer');
+        if (!attackRoot) return;
+
+        let hud = document.getElementById('ff-attack-hp-hud');
+        if (!hud) {
+            hud = document.createElement('div');
+            hud.id = 'ff-attack-hp-hud';
+            hud.className = 'ff-attack-hp-hud';
+
+            const hospBanner = document.getElementById('ff-attack-hosp-banner');
+            if (hospBanner && hospBanner.parentNode) {
+                hospBanner.parentNode.insertBefore(hud, hospBanner.nextSibling);
+            } else {
+                const topHeader = attackRoot.querySelector('h4, [class*="title___"], [class*="header___"], [class*="title"], [class*="top___"]');
+                if (topHeader && topHeader.parentNode) {
+                    topHeader.parentNode.insertBefore(hud, topHeader.nextSibling);
+                } else {
+                    attackRoot.prepend(hud);
+                }
+            }
+        }
+
+        const getTier = (pct) => {
+            if (pct <= 0) return 'dead';
+            if (pct <= 20) return 'danger';
+            if (pct < 50) return 'warning';
+            return 'high';
+        };
+
+        const attTier = attackerHp ? getTier(attackerHp.percent) : 'high';
+        const defTier = defenderHp ? getTier(defenderHp.percent) : 'high';
+
+        const attStr = attackerHp ? (attackerHp.maximum > 0 ? `${attackerHp.current.toLocaleString()} / ${attackerHp.maximum.toLocaleString()} (${attackerHp.percent.toFixed(attackerHp.percent % 1 === 0 ? 0 : 1)}%)` : `${attackerHp.percent.toFixed(1)}%`) : '--';
+        const defStr = defenderHp ? (defenderHp.maximum > 0 ? `${defenderHp.current.toLocaleString()} / ${defenderHp.maximum.toLocaleString()} (${defenderHp.percent.toFixed(defenderHp.percent % 1 === 0 ? 0 : 1)}%)` : `${defenderHp.percent.toFixed(1)}%`) : '--';
+
+        const defExecute = (defenderHp && defenderHp.percent > 0 && defenderHp.percent <= 20)
+            ? '<span class="ff-hud-execute-badge">⚔️ EXECUTE READY</span>'
+            : '';
+
+        hud.innerHTML = `
+            <div class="ff-hud-fighter ff-hud-attacker">
+                <span>🛡️</span>
+                <span>${attackerName || 'You'}:</span>
+                <span class="ff-hud-hp-pill ${attTier}">${attStr}</span>
+            </div>
+            <div class="ff-hud-vs">VS</div>
+            <div class="ff-hud-fighter ff-hud-defender">
+                <span>⚔️</span>
+                <span>${defenderName || 'Target'}:</span>
+                <span class="ff-hud-hp-pill ${defTier}">${defStr}</span>
+                ${defExecute}
+            </div>
+        `;
+    }
+
+    function updateAttackHpDisplay() {
+        if (!window.location.href.includes("sid=attack")) return;
+
+        const { attackerCard, defenderCard } = findFighterCards();
+        if (!attackerCard && !defenderCard) return;
+
+        const targetId = getAttackTargetId();
+        const cachedTargetLife = targetId ? (targetLifeData[targetId] || getCachedTargetLife(targetId)) : null;
+        const defenderMaxHp = cachedTargetLife?.maximum || 0;
+        const defenderName = cachedTargetLife?.name || (defenderCard?.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]')?.textContent?.trim() || 'Target');
+
+        const attackerMaxHp = getAttackerMaxHp();
+        const attackerName = getMyPlayerName();
+
+        let attackerHp = null;
+        let defenderHp = null;
+
+        if (attackerCard) {
+            attackerHp = getFighterHpInfo(attackerCard, attackerMaxHp, true);
+            if (attackerHp) updateFighterHpBadge(attackerCard, attackerHp, attackerName);
+        }
+
+        if (defenderCard) {
+            defenderHp = getFighterHpInfo(defenderCard, defenderMaxHp, false);
+            if (defenderHp) updateFighterHpBadge(defenderCard, defenderHp, defenderName);
+        }
+
+        if (attackerHp || defenderHp) {
+            updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName);
+        }
+    }
+
+    let attackHpObserver = null;
+    function initAttackPageHpTracker() {
+        if (!window.location.href.includes("sid=attack")) return;
+
+        const targetId = getAttackTargetId();
+        if (targetId) {
+            checkAndRenderAttackHospTimer(targetId);
+        }
+
+        updateAttackHpDisplay();
+
+        const attackRoot = document.getElementById('attack-root') || document.querySelector('.content-wrapper') || document.body;
+        if (attackRoot && !attackHpObserver) {
+            attackHpObserver = new MutationObserver(() => {
+                updateAttackHpDisplay();
+            });
+            attackHpObserver.observe(attackRoot, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['style', 'class', 'width']
+            });
+        }
+
+        if (!window.__ffAttackHpInterval) {
+            window.__ffAttackHpInterval = setInterval(updateAttackHpDisplay, 300);
+        }
     }
 
     function updateAllHospitalTimers() {
@@ -1543,9 +2080,10 @@
             }
         });
 
-        // Update attack screen hospital countdown if on attack page
+        // Update attack screen hospital countdown & HP if on attack page
         if (window.location.href.includes("sid=attack")) {
             updateAttackPageHospTimer();
+            updateAttackHpDisplay();
         }
     }
 
@@ -2790,6 +3328,7 @@
         if (!apiKey) set_message("Limited API key needed - click to add");
         if (match2) {
             checkAndRenderAttackHospTimer(target_id);
+            initAttackPageHpTracker();
         }
     }
 
@@ -2834,6 +3373,8 @@
         if (window.location.href.includes("factions.php")) {
             updateFactionMemberTableBS();
             ensureWarSortBars();
+        } else if (window.location.href.includes("sid=attack")) {
+            updateAttackHpDisplay();
         }
     });
 

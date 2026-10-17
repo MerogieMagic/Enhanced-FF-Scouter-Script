@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA War Sorter & FF Scouter Enhanced
 // @namespace    Violentmonkey Scripts
-// @version      9.6
+// @version      9.7
 // @description  Torn PDA optimized combat suite: instant persistent BS caching, 7-tier threat badges, smart war sorting, live hospital countdowns & direct attack staging.
 // @author       Merogie, rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -27,7 +27,7 @@
     }
     window.__TORNPDA_WAR_ENHANCED_ACTIVE__ = true;
 
-    const SCRIPT_VERSION = 9.6;
+    const SCRIPT_VERSION = 9.7;
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_war_enhanced.user.js";
     const SETTINGS_KEY = 'tornpda-war-sorter-settings-v9';
     const CACHE_PREFIX = 'tornpda_ff_cache_';
@@ -209,6 +209,141 @@
             font-family: monospace, monospace !important;
             color: #f87171 !important;
             letter-spacing: 1.5px !important;
+        }
+
+        /* --- Absolute HP Tracking & Combat HUD for Torn PDA --- */
+        .ff-player-hp-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            margin-left: auto !important;
+            padding: 1px 6px !important;
+            border-radius: 4px !important;
+            font-family: monospace, monospace !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            line-height: 1.2 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9) !important;
+            white-space: nowrap !important;
+            user-select: none !important;
+            transition: all 0.2s ease !important;
+            z-index: 10 !important;
+        }
+
+        .ff-player-hp-badge.high {
+            background: rgba(22, 101, 52, 0.6) !important;
+            border: 1px solid rgba(34, 197, 94, 0.7) !important;
+            color: #4ade80 !important;
+        }
+
+        .ff-player-hp-badge.warning {
+            background: rgba(161, 98, 7, 0.6) !important;
+            border: 1px solid rgba(234, 179, 8, 0.7) !important;
+            color: #facc15 !important;
+        }
+
+        .ff-player-hp-badge.danger {
+            background: rgba(153, 27, 27, 0.7) !important;
+            border: 1px solid #ef4444 !important;
+            color: #fca5a5 !important;
+            animation: ffExecuteGlowPDA 1.2s infinite ease-in-out !important;
+        }
+
+        .ff-player-hp-badge.dead {
+            background: rgba(30, 41, 59, 0.7) !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+            color: #94a3b8 !important;
+        }
+
+        .ff-attack-hp-hud {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+            margin: 4px 0 8px 0 !important;
+            padding: 4px 10px !important;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.92) 100%) !important;
+            border: 1px solid rgba(71, 85, 105, 0.5) !important;
+            border-radius: 6px !important;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5) !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            clear: both !important;
+        }
+
+        .ff-hud-fighter {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            color: #f1f5f9 !important;
+        }
+
+        .ff-hud-vs {
+            font-size: 11px !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.5px !important;
+            color: #94a3b8 !important;
+            padding: 0 4px !important;
+        }
+
+        .ff-hud-hp-pill {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 3px !important;
+            padding: 1px 6px !important;
+            border-radius: 4px !important;
+            font-family: monospace, monospace !important;
+            font-size: 11px !important;
+            font-weight: 800 !important;
+        }
+
+        .ff-hud-hp-pill.high {
+            background: rgba(34, 197, 94, 0.25) !important;
+            border: 1px solid rgba(34, 197, 94, 0.5) !important;
+            color: #4ade80 !important;
+        }
+
+        .ff-hud-hp-pill.warning {
+            background: rgba(234, 179, 8, 0.25) !important;
+            border: 1px solid rgba(234, 179, 8, 0.5) !important;
+            color: #facc15 !important;
+        }
+
+        .ff-hud-hp-pill.danger {
+            background: rgba(239, 68, 68, 0.3) !important;
+            border: 1px solid rgba(239, 68, 68, 0.6) !important;
+            color: #f87171 !important;
+            animation: ffExecuteGlowPDA 1.2s infinite ease-in-out !important;
+        }
+
+        .ff-hud-hp-pill.dead {
+            background: rgba(148, 163, 184, 0.15) !important;
+            border: 1px solid rgba(148, 163, 184, 0.3) !important;
+            color: #94a3b8 !important;
+        }
+
+        .ff-hud-execute-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 2px !important;
+            background: #dc2626 !important;
+            color: #ffffff !important;
+            font-size: 9.5px !important;
+            font-weight: 900 !important;
+            padding: 1px 4px !important;
+            border-radius: 3px !important;
+            letter-spacing: 0.3px !important;
+            animation: ffExecuteGlowPDA 0.8s infinite ease-in-out !important;
+        }
+
+        @keyframes ffExecuteGlowPDA {
+            0% { box-shadow: 0 0 3px #ef4444; }
+            50% { box-shadow: 0 0 8px #ef4444, 0 0 3px #dc2626; }
+            100% { box-shadow: 0 0 3px #ef4444; }
         }
 
         /* Mobile Floating Controls */
@@ -451,6 +586,8 @@
     // --- 5. STATE & DESTINATIONS ---
     const memberData = {};
     const memberCountdowns = {}; // targetId -> { until, state, desc }
+    const targetLifeData = {};    // targetId -> { current, maximum, name }
+    let myMaxHp = null;
 
     const DEST_TABLE = {
         "mexico": "MX", "cayman islands": "CI", "canada": "CA",
@@ -816,17 +953,51 @@
         }
     }
 
-    // --- 9. ATTACK PAGE REAL-TIME COUNTDOWN BANNER ---
-    function checkAndRenderAttackHospTimer() {
+    // --- 9. ATTACK PAGE REAL-TIME COUNTDOWN BANNER & ABSOLUTE HP ---
+    let attackFetchInProgress = false;
+    async function checkAndRenderAttackHospTimer() {
         if (!PAGE.attack) return;
         const match = location.href.match(/user2ID=(\d+)/);
         if (!match) return;
         const targetId = match[1];
 
-        const cached = memberCountdowns[targetId] || getCachedStats(`hosp_${targetId}`);
+        const nowSec = Math.floor(Date.now() / 1000);
+        let cached = memberCountdowns[targetId] || getCachedStats(`hosp_${targetId}`);
+        const cachedLife = targetLifeData[targetId] || getCachedStats(`target_life_${targetId}`);
+
+        const apiKey = getApiKey();
+        if ((!cached || !cached.until || cached.until < nowSec || !cachedLife) && apiKey && !attackFetchInProgress) {
+            attackFetchInProgress = true;
+            try {
+                const url = `https://api.torn.com/user/${targetId}?selections=profile,basic&key=${apiKey}&comment=PDAWarAttack`;
+                const data = await fetchAPI(url);
+                if (data) {
+                    if (data.status) {
+                        const until = parseInt(data.status.until || '0', 10);
+                        const state = data.status.state || '';
+                        const desc = data.status.description || '';
+                        memberCountdowns[targetId] = { until, state, desc };
+                        setCachedStats(`hosp_${targetId}`, memberCountdowns[targetId]);
+                        cached = memberCountdowns[targetId];
+                    }
+                    if (data.life && data.life.maximum) {
+                        targetLifeData[targetId] = {
+                            current: parseInt(data.life.current, 10) || 0,
+                            maximum: parseInt(data.life.maximum, 10) || 0,
+                            name: data.name || ''
+                        };
+                        setCachedStats(`target_life_${targetId}`, targetLifeData[targetId]);
+                        updateAttackHpDisplay();
+                    }
+                }
+            } catch (e) {
+            } finally {
+                attackFetchInProgress = false;
+            }
+        }
+
         if (!cached || cached.state !== 'Hospital') return;
 
-        const nowSec = Math.floor(Date.now() / 1000);
         const remainingSec = (cached.until > nowSec) ? cached.until - nowSec : 0;
         const timeStr = formatTime(remainingSec);
 
@@ -845,6 +1016,328 @@
             banner.innerHTML = `⚡ <strong>TARGET DISCHARGED!</strong> Ready to attack`;
         } else {
             banner.innerHTML = `🏥 In Hospital: <strong style="font-family:monospace;">${timeStr}</strong> (${cached.desc || 'In Hospital'})`;
+        }
+    }
+
+    function getMyPlayerName() {
+        try {
+            const userEl = document.getElementById('torn-user');
+            if (userEl && userEl.value) {
+                const data = JSON.parse(userEl.value);
+                if (data.playername) return data.playername;
+            }
+        } catch (e) {}
+        const nameEl = document.querySelector('[class*="menu-info-name"], [class*="userName___"], #sidebar a[href*="profiles.php"]');
+        if (nameEl) {
+            const t = nameEl.textContent.trim();
+            if (t) return t;
+        }
+        return 'Merogie';
+    }
+
+    function getAttackerMaxHp() {
+        const barLife = document.getElementById('barLife') || document.querySelector('[class*="bar-life"]');
+        if (barLife) {
+            const text = barLife.textContent || '';
+            const m = text.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
+            if (m) {
+                const max = parseInt(m[2].replace(/,/g, ''), 10);
+                if (max > 0) {
+                    try { localStorage.setItem('tornpda_my_max_hp', String(max)); } catch(e) {}
+                    return max;
+                }
+            }
+        }
+        try {
+            const cached = localStorage.getItem('tornpda_my_max_hp');
+            if (cached) {
+                const val = parseInt(cached, 10);
+                if (val > 0) return val;
+            }
+        } catch(e) {}
+        return 3937;
+    }
+
+    function findFighterCards() {
+        let attackerCard = document.getElementById('attacker') || 
+                           document.querySelector('[class*="attacker___"], [class*="player___"][class*="user___"]');
+        let defenderCard = document.getElementById('defender') || 
+                           document.querySelector('[class*="defender___"], [class*="player___"][class*="opponent___"]');
+
+        const players = Array.from(document.querySelectorAll('[class*="player___"], [class*="playerWindow___"], [class*="player-window"]'));
+        if (players.length >= 2) {
+            if (!attackerCard) attackerCard = players[0];
+            if (!defenderCard) defenderCard = players[1];
+        }
+
+        const myName = getMyPlayerName();
+        const match = location.href.match(/user2ID=(\d+)/);
+        const targetId = match ? match[1] : null;
+        const targetLife = targetId ? (targetLifeData[targetId] || getCachedStats(`target_life_${targetId}`)) : null;
+        const targetName = targetLife?.name;
+
+        if (attackerCard && defenderCard && myName && targetName) {
+            const attText = attackerCard.textContent || '';
+            const defText = defenderCard.textContent || '';
+            if (!attText.includes(myName) && defText.includes(myName)) {
+                const tmp = attackerCard;
+                attackerCard = defenderCard;
+                defenderCard = tmp;
+            }
+        }
+
+        return { attackerCard, defenderCard };
+    }
+
+    function extractLifePercent(cardEl) {
+        if (!cardEl) return null;
+
+        const barCandidates = cardEl.querySelectorAll(
+            '[class*="life___"], [class*="health___"], [class*="progress___"], [class*="statusBar___"], [role="progressbar"]'
+        );
+
+        for (const bar of barCandidates) {
+            if (bar.closest('[class*="weapon___"], [class*="equip___"], [class*="item___"], [class*="cooldown___"], .ff-player-hp-badge, .ff-attack-hp-hud')) continue;
+
+            const fills = [bar, ...bar.querySelectorAll('[class*="fill___"], [class*="filler___"], div')];
+            for (const el of fills) {
+                const w = el.style && el.style.width;
+                if (w && w.includes('%')) {
+                    const m = w.match(/([\d.]+)%/);
+                    if (m) {
+                        const val = parseFloat(m[1]);
+                        if (!isNaN(val) && val >= 0 && val <= 100) return val;
+                    }
+                }
+                const transform = el.style && el.style.transform;
+                if (transform && transform.includes('scaleX')) {
+                    const m = transform.match(/scaleX\(([\d.]+)\)/);
+                    if (m) {
+                        const val = parseFloat(m[1]) * 100;
+                        if (!isNaN(val) && val >= 0 && val <= 100) return val;
+                    }
+                }
+            }
+        }
+
+        const allFills = cardEl.querySelectorAll('div[style*="width"], [role="progressbar"]');
+        for (const el of allFills) {
+            if (el.closest('[class*="weapon___"], [class*="equip___"], [class*="item___"], [class*="cooldown___"], .ff-player-hp-badge, .ff-attack-hp-hud')) continue;
+            const w = el.style && el.style.width;
+            if (w && w.includes('%')) {
+                const m = w.match(/([\d.]+)%/);
+                if (m) {
+                    const val = parseFloat(m[1]);
+                    if (!isNaN(val) && val >= 0 && val <= 100) return val;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function extractHpText(cardEl) {
+        if (!cardEl) return null;
+        const textElements = cardEl.querySelectorAll('span, div, p');
+        for (const el of textElements) {
+            if (el.closest('.ff-player-hp-badge, .ff-attack-hp-hud, .ff-countdown-digits, [class*="weapon___"]')) continue;
+            const txt = (el.textContent || '').trim();
+            const m = txt.match(/^(\d[\d,]*)\s*\/\s*(\d[\d,]*)$/);
+            if (m) {
+                const curr = parseInt(m[1].replace(/,/g, ''), 10);
+                const max = parseInt(m[2].replace(/,/g, ''), 10);
+                if (!isNaN(curr) && !isNaN(max) && max > 0 && curr <= max * 1.5) {
+                    return { current: curr, maximum: max, percent: (curr / max) * 100, exactFromDom: true };
+                }
+            }
+        }
+        return null;
+    }
+
+    function getFighterHpInfo(cardEl, knownMaxHp, isAttacker) {
+        if (!cardEl) return null;
+
+        const fromText = extractHpText(cardEl);
+        if (fromText) return fromText;
+
+        const percent = extractLifePercent(cardEl);
+        if (percent === null) {
+            if (knownMaxHp > 0) {
+                return { current: knownMaxHp, maximum: knownMaxHp, percent: 100, exactFromDom: false };
+            }
+            return null;
+        }
+
+        const max = knownMaxHp || (isAttacker ? getAttackerMaxHp() : 0);
+        let curr = max > 0 ? Math.round((percent / 100) * max) : 0;
+        if (percent <= 0) curr = 0;
+        if (percent >= 100 && max > 0) curr = max;
+
+        return {
+            current: curr,
+            maximum: max,
+            percent: percent,
+            exactFromDom: false
+        };
+    }
+
+    function updateFighterHpBadge(cardEl, hpInfo, fighterName) {
+        if (!cardEl || !hpInfo) return;
+
+        const headerEl = cardEl.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]') || cardEl;
+        if (headerEl && headerEl !== cardEl) {
+            headerEl.style.display = 'flex';
+            headerEl.style.alignItems = 'center';
+            headerEl.style.justifyContent = 'space-between';
+        }
+
+        let badge = cardEl.querySelector('.ff-player-hp-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'ff-player-hp-badge';
+            if (headerEl && headerEl !== cardEl) {
+                headerEl.appendChild(badge);
+            } else {
+                cardEl.prepend(badge);
+            }
+        }
+
+        const pct = hpInfo.percent;
+        let tierClass = 'high';
+        let executeBadge = '';
+
+        if (pct <= 0) {
+            tierClass = 'dead';
+        } else if (pct <= 20) {
+            tierClass = 'danger';
+            executeBadge = '<span class="ff-hud-execute-badge">⚔️ EXECUTE</span>';
+        } else if (pct < 50) {
+            tierClass = 'warning';
+        }
+
+        badge.className = `ff-player-hp-badge ${tierClass}`;
+
+        let hpDisplay = '';
+        if (hpInfo.maximum > 0) {
+            const pctStr = pct.toFixed(pct % 1 === 0 ? 0 : 1);
+            hpDisplay = `${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()} (${pctStr}%)`;
+        } else {
+            hpDisplay = `${pct.toFixed(pct % 1 === 0 ? 0 : 1)}% HP`;
+        }
+
+        badge.innerHTML = `
+            <span class="ff-hp-val">❤️ ${hpDisplay}</span>
+            ${executeBadge}
+        `;
+    }
+
+    function updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName) {
+        const attackRoot = document.getElementById('attack-root') || document.querySelector('.content-wrapper') || document.getElementById('mainContainer');
+        if (!attackRoot) return;
+
+        let hud = document.getElementById('ff-attack-hp-hud');
+        if (!hud) {
+            hud = document.createElement('div');
+            hud.id = 'ff-attack-hp-hud';
+            hud.className = 'ff-attack-hp-hud';
+
+            const hospBanner = document.getElementById('ff-attack-hosp-banner');
+            if (hospBanner && hospBanner.parentNode) {
+                hospBanner.parentNode.insertBefore(hud, hospBanner.nextSibling);
+            } else {
+                const topHeader = attackRoot.querySelector('h4, [class*="title___"], [class*="header___"], [class*="title"], [class*="top___"]');
+                if (topHeader && topHeader.parentNode) {
+                    topHeader.parentNode.insertBefore(hud, topHeader.nextSibling);
+                } else {
+                    attackRoot.prepend(hud);
+                }
+            }
+        }
+
+        const getTier = (pct) => {
+            if (pct <= 0) return 'dead';
+            if (pct <= 20) return 'danger';
+            if (pct < 50) return 'warning';
+            return 'high';
+        };
+
+        const attTier = attackerHp ? getTier(attackerHp.percent) : 'high';
+        const defTier = defenderHp ? getTier(defenderHp.percent) : 'high';
+
+        const attStr = attackerHp ? (attackerHp.maximum > 0 ? `${attackerHp.current.toLocaleString()} / ${attackerHp.maximum.toLocaleString()} (${attackerHp.percent.toFixed(attackerHp.percent % 1 === 0 ? 0 : 1)}%)` : `${attackerHp.percent.toFixed(1)}%`) : '--';
+        const defStr = defenderHp ? (defenderHp.maximum > 0 ? `${defenderHp.current.toLocaleString()} / ${defenderHp.maximum.toLocaleString()} (${defenderHp.percent.toFixed(defenderHp.percent % 1 === 0 ? 0 : 1)}%)` : `${defenderHp.percent.toFixed(1)}%`) : '--';
+
+        const defExecute = (defenderHp && defenderHp.percent > 0 && defenderHp.percent <= 20)
+            ? '<span class="ff-hud-execute-badge">⚔️ EXECUTE READY</span>'
+            : '';
+
+        hud.innerHTML = `
+            <div class="ff-hud-fighter ff-hud-attacker">
+                <span>🛡️</span>
+                <span>${attackerName || 'You'}:</span>
+                <span class="ff-hud-hp-pill ${attTier}">${attStr}</span>
+            </div>
+            <div class="ff-hud-vs">VS</div>
+            <div class="ff-hud-fighter ff-hud-defender">
+                <span>⚔️</span>
+                <span>${defenderName || 'Target'}:</span>
+                <span class="ff-hud-hp-pill ${defTier}">${defStr}</span>
+                ${defExecute}
+            </div>
+        `;
+    }
+
+    function updateAttackHpDisplay() {
+        if (!PAGE.attack) return;
+
+        const { attackerCard, defenderCard } = findFighterCards();
+        if (!attackerCard && !defenderCard) return;
+
+        const match = location.href.match(/user2ID=(\d+)/);
+        const targetId = match ? match[1] : null;
+        const cachedTargetLife = targetId ? (targetLifeData[targetId] || getCachedStats(`target_life_${targetId}`)) : null;
+        const defenderMaxHp = cachedTargetLife?.maximum || 0;
+        const defenderName = cachedTargetLife?.name || (defenderCard?.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]')?.textContent?.trim() || 'Target');
+
+        const attackerMaxHp = getAttackerMaxHp();
+        const attackerName = getMyPlayerName();
+
+        let attackerHp = null;
+        let defenderHp = null;
+
+        if (attackerCard) {
+            attackerHp = getFighterHpInfo(attackerCard, attackerMaxHp, true);
+            if (attackerHp) updateFighterHpBadge(attackerCard, attackerHp, attackerName);
+        }
+
+        if (defenderCard) {
+            defenderHp = getFighterHpInfo(defenderCard, defenderMaxHp, false);
+            if (defenderHp) updateFighterHpBadge(defenderCard, defenderHp, defenderName);
+        }
+
+        if (attackerHp || defenderHp) {
+            updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName);
+        }
+    }
+
+    let attackHpObserver = null;
+    function initAttackPageHpTracker() {
+        if (!PAGE.attack) return;
+
+        checkAndRenderAttackHospTimer();
+        updateAttackHpDisplay();
+
+        const attackRoot = document.getElementById('attack-root') || document.querySelector('.content-wrapper') || document.body;
+        if (attackRoot && !attackHpObserver) {
+            attackHpObserver = new MutationObserver(() => {
+                updateAttackHpDisplay();
+            });
+            attackHpObserver.observe(attackRoot, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['style', 'class', 'width']
+            });
         }
     }
 
@@ -1149,8 +1642,9 @@
         setInterval(updateFactionData, 20000);
         setInterval(sortAndFilterRoster, 1000);
     } else if (PAGE.attack) {
-        checkAndRenderAttackHospTimer();
+        initAttackPageHpTracker();
         setInterval(checkAndRenderAttackHospTimer, 1000);
+        setInterval(updateAttackHpDisplay, 300);
     } else if (PAGE.profile) {
         const match = location.href.match(/XID=(\d+)/);
         if (match) {

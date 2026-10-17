@@ -2034,10 +2034,50 @@ Extracted directly via Torn API stock market endpoints:
        - Hospital timers (`updateAllHospitalTimers`), 15s faction status API polling (`refreshFactionStatusData`), 400ms table maintenance intervals, and target finder pre-fetching (`fetchFFScouterTargets`) remain strictly disabled on `step=listing` and `step=search`.
     5. *Version Bump*:
        - Bumped `ff_scouter_bs_enhanced.user.js` to **v3.02**.
+#### Session 98
+- **Focus**: Real-Time Absolute HP Engine & Tactical Combat HUD on Fight Screen (`page.php?sid=attack`).
+  - **User Directive**:
+    - "can show absolute hp in fight screen"
+  - **Problem Statement & Combat Blindspot**:
+    - In Torn City's native fight/attack screen (`page.php?sid=attack&user2ID=...`), Torn renders only a graphical blue life bar across each fighter card with **zero numerical HP readouts**.
+    - Players have no visual feedback on exact remaining hit points (e.g. Merogie has `3,937 / 3,937 HP` while defender has `2,180 / 4,500 HP`).
+    - This creates tactical blindspots during Ranked Wars and high-stakes chains where knowing the exact HP remaining is critical for execute perks, weapon switching, and finish-kill timing.
+  - **Architectural Investigation & Key Discoveries**:
+    1. *Authoritative Torn API Life Telemetry*:
+       - Verified that `https://api.torn.com/user/{id}?selections=profile,basic&key={key}` returns `life: { current: ..., maximum: ... }` for ANY player (including Duke [4] with 5,500,000 HP, high-level war opponents, or low-level targets).
+       - Confirmed this endpoint was **already actively queried** on the attack screen by `checkAndRenderAttackHospTimer` (to detect hospital release times). By capturing `data.life.maximum` and `data.life.current` in this existing query, **zero additional API calls or rate limits are consumed**!
+    2. *Attacker (Self) Life Resolution*:
+       - Merogie's max life (`3,937`) is extracted directly from the Torn UI `#barLife` element or cached from `fetchMyBattleStats()` which now requests `selections=battlestats,bars` in a single combined call.
+    3. *Combat DOM Analysis & Selector Resilience*:
+       - Analyzed Torn React app DOM modules: Attacker (`#attacker` or `[class*="player___"][class*="user___"]`) and Defender (`#defender` or `[class*="player___"][class*="opponent___"]`).
+       - Header elements (`[class*="header___"]`, `[class*="title___"]`, `h4`) have an empty right side, creating ideal real estate for header HP badges.
+       - Progress fill elements utilize `style="width: X%"` or `transform: scaleX(X)` which dynamically update with every weapon hit.
+  - **Engineering Solutions Implemented**:
+    1. *Multi-Source Hybrid Detection (`getFighterHpInfo`)*:
+       - *Direct DOM Text Scraping*: First checks if Torn or extensions have rendered explicit text matching `/^(\d[\d,]*)\s*\/\s*(\d[\d,]*)$/`.
+       - *Dynamic Formula Fallback*: If exact text is omitted (standard Torn React behavior), extracts the progress bar width percentage (`pct`) and calculates exact HP in real time:
+         $$\text{Current HP} = \text{Math.round}\left(\frac{\text{pct}}{100} \times \text{Max HP}\right)$$
+       - Clamps values strictly between `0` (Defeated) and `Max HP`.
+    2. *Dual Visual Placements*:
+       - **Fighter Header Badges (`.ff-player-hp-badge`)**: Injected into the right side of each fighter's header bar, displaying e.g. `❤️ 3,937 / 3,937 (100%)` for Attacker and `❤️ 2,180 / 4,500 (48.4%)` for Defender.
+       - **Tactical Combat HUD Banner (`.ff-attack-hp-hud`)**: Positioned at the top of the arena displaying:
+         `[🛡️ Merogie: 3,937 / 3,937 (100%)]  VS  [⚔️ Target: 2,180 / 4,500 (48.4%)]`
+    3. *4-Tier Dynamic Combat Color & Execute Alert Engine*:
+       - **High Tier ($\ge 50\%$)**: Bright emerald green (`#4ade80`), green border, standard combat ready state.
+       - **Warning Tier ($20\% - 49.9\%$)**: Amber yellow (`#facc15`), warning border, moderate damage received.
+       - **Danger / Execute Tier ($> 0\%$ and $\le 20\%$)**: Combat crimson (`#f87171`), pulsing red glow animation (`@keyframes ffExecuteGlow`), and displays flashing `⚔️ EXECUTE` / `⚔️ EXECUTE READY` alerts to trigger finishing blows and weapon perks.
+       - **Defeated Tier ($0\%$)**: Muted slate (`#94a3b8`), `💀 DEFEATED / 0 HP`.
+    4. *Reactive Sub-millisecond Observer (`initAttackPageHpTracker`)*:
+       - Attached a dedicated `MutationObserver` to `#attack-root` filtering for `style`, `class`, and `width` attributes to capture each bullet, hit, and turn instantaneously with zero lag.
+       - Backed by a 300ms interval for seamless animation sync across all devices.
+    5. *Cross-Platform Compatibility*:
+       - **PC Userscript (`ff_scouter_bs_enhanced.user.js` v3.03)**: Full desktop support with wide-screen combat HUD and header badges.
+       - **Mobile Userscript (`tornpda_war_enhanced.user.js` v9.7 & `meta.js` v9.7)**: Mobile-optimized compact layout with responsive pills and touch-friendly execution alerts.
   - **Verification**:
-    - Validated userscript syntax via `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
-  - **Date & Time**: 2026-10-17 10:05:00 +08:00
+    - Validated both scripts with `node --check` (both exited with code 0).
+  - **Date & Time**: 2026-10-17 14:25:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
 
 
 
