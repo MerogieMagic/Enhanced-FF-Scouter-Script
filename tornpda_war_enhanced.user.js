@@ -1217,18 +1217,21 @@
 
         badge.className = `ff-player-hp-badge ${tierClass}`;
 
+        const pctStr = pct.toFixed(pct % 1 === 0 ? 0 : 1);
         let hpDisplay = '';
         if (hpInfo.maximum > 0) {
-            const pctStr = pct.toFixed(pct % 1 === 0 ? 0 : 1);
             hpDisplay = `${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()} (${pctStr}%)`;
         } else {
-            hpDisplay = `${pct.toFixed(pct % 1 === 0 ? 0 : 1)}% HP`;
+            hpDisplay = `${pctStr}% HP`;
         }
 
-        badge.innerHTML = `
-            <span class="ff-hp-val">❤️ ${hpDisplay}</span>
-            ${executeBadge}
-        `;
+        const badgeHtml = `<span class="ff-hp-val">❤️ ${hpDisplay}</span>${executeBadge}`;
+        const targetClass = `ff-player-hp-badge ${tierClass}`;
+
+        if (badge.dataset.lastHtml === badgeHtml && badge.className === targetClass) return;
+        badge.dataset.lastHtml = badgeHtml;
+        badge.className = targetClass;
+        badge.innerHTML = badgeHtml;
     }
 
     function updateAttackHpHud(attackerHp, defenderHp, attackerName, defenderName) {
@@ -1271,7 +1274,7 @@
             ? '<span class="ff-hud-execute-badge">⚔️ EXECUTE READY</span>'
             : '';
 
-        hud.innerHTML = `
+        const hudHtml = `
             <div class="ff-hud-fighter ff-hud-attacker">
                 <span>🛡️</span>
                 <span>${attackerName || 'You'}:</span>
@@ -1285,6 +1288,10 @@
                 ${defExecute}
             </div>
         `;
+
+        if (hud.dataset.lastHtml === hudHtml) return;
+        hud.dataset.lastHtml = hudHtml;
+        hud.innerHTML = hudHtml;
     }
 
     function updateAttackHpDisplay() {
@@ -1320,25 +1327,11 @@
         }
     }
 
-    let attackHpObserver = null;
     function initAttackPageHpTracker() {
         if (!PAGE.attack) return;
 
         checkAndRenderAttackHospTimer();
         updateAttackHpDisplay();
-
-        const attackRoot = document.getElementById('attack-root') || document.querySelector('.content-wrapper') || document.body;
-        if (attackRoot && !attackHpObserver) {
-            attackHpObserver = new MutationObserver(() => {
-                updateAttackHpDisplay();
-            });
-            attackHpObserver.observe(attackRoot, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['style', 'class', 'width']
-            });
-        }
     }
 
     // --- 10. UNIFIED SORTING & FILTERING ---

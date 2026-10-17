@@ -1,14 +1,13 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.00
+// @version      1.01
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_notification
 // @run-at       document-end
 // ==/UserScript==
 
@@ -21,13 +20,17 @@
 
     // --- 1. STORAGE & POLYFILLS ---
     function safeAddStyle(css) {
-        if (typeof GM_addStyle === 'function') {
-            GM_addStyle(css);
-        } else {
-            const style = document.createElement('style');
-            style.type = 'text/css';
-            style.textContent = css;
-            (document.head || document.documentElement).appendChild(style);
+        try {
+            if (typeof GM_addStyle === 'function') {
+                GM_addStyle(css);
+            } else {
+                const style = document.createElement('style');
+                style.type = 'text/css';
+                style.textContent = css;
+                (document.head || document.documentElement).appendChild(style);
+            }
+        } catch (e) {
+            console.error('[Stakeout] Style error:', e);
         }
     }
 
@@ -82,22 +85,19 @@
         setStorage('config', config);
     }
 
-    let watchlist = getStorage('watchlist', [
-        // Array of target IDs (strings)
-    ]);
+    let watchlist = getStorage('watchlist', []);
+    if (!Array.isArray(watchlist)) watchlist = [];
+
     function saveWatchlist() {
         setStorage('watchlist', watchlist);
     }
 
-    // Target telemetry memory cache: id -> { data, lastChecked, previous }
     const targetsCache = {};
-    // Rate limit tracking: [timestamps]
     const callLog = [];
 
     function recordApiCall() {
         const now = Date.now();
         callLog.push(now);
-        // Keep only calls within the last 60 seconds
         while (callLog.length > 0 && callLog[0] < now - 60000) {
             callLog.shift();
         }
@@ -111,7 +111,7 @@
         return callLog.length;
     }
 
-    // --- 3. AUDIO ENGINE (Synthesized Zero-Dependency Web Audio) ---
+    // --- 3. AUDIO ENGINE (Synthesized Web Audio API) ---
     function playStakeoutAlarm(type = 'okay') {
         if (!config.soundAlarm) return;
         try {
@@ -120,7 +120,6 @@
             const ctx = new AudioCtx();
 
             if (type === 'okay') {
-                // High-priority dual-chime for attackable target (880Hz -> 1320Hz -> 1760Hz)
                 const osc1 = ctx.createOscillator();
                 const osc2 = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -144,7 +143,6 @@
                 osc1.stop(ctx.currentTime + 0.15);
                 osc2.stop(ctx.currentTime + 0.55);
             } else if (type === 'online') {
-                // Distinct ascending chirp (523Hz -> 659Hz)
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
                 osc.type = 'sine';
@@ -157,7 +155,6 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.35);
             } else {
-                // Triple warning beeps
                 for (let i = 0; i < 3; i++) {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
@@ -181,32 +178,20 @@
     function sendStakeoutNotification(title, body, url) {
         if (!config.desktopNotif) return;
         try {
-            if (typeof GM_notification === 'function') {
-                GM_notification({
-                    title: `🎯 Stakeout: ${title}`,
-                    text: body,
-                    timeout: 8000,
-                    onclick: () => {
-                        if (url) window.open(url, '_blank');
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    const notif = new Notification(`🎯 Stakeout: ${title}`, {
+                        body: body,
+                        icon: 'https://www.torn.com/favicon.ico'
+                    });
+                    if (url) {
+                        notif.onclick = () => window.open(url, '_blank');
                     }
-                });
-                return;
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission();
+                }
             }
         } catch (e) {}
-
-        if ('Notification' in window) {
-            if (Notification.permission === 'granted') {
-                const notif = new Notification(`🎯 Stakeout: ${title}`, {
-                    body: body,
-                    icon: 'https://www.torn.com/favicon.ico'
-                });
-                if (url) {
-                    notif.onclick = () => window.open(url, '_blank');
-                }
-            } else if (Notification.permission !== 'denied') {
-                Notification.requestPermission();
-            }
-        }
     }
 
     // --- 5. TORN API POLLER & TELEMETRY ---
@@ -214,7 +199,6 @@
         const apiKey = getApiKey();
         if (!apiKey) return null;
 
-        // Rate limit guard (max 90 calls/min)
         if (getApiCallRate() >= 90) {
             console.warn('[Stakeout] Rate limit threshold reached, skipping cycle');
             return null;
@@ -258,7 +242,6 @@
         const previous = existing ? existing.data : null;
 
         if (previous) {
-            // Trigger 1: Target becomes OKAY (Hosp -> Okay)
             if (config.alertOnOkay && previous.state !== 'Okay' && currentSnapshot.state === 'Okay') {
                 playStakeoutAlarm('okay');
                 sendStakeoutNotification(
@@ -271,7 +254,6 @@
                 }
             }
 
-            // Trigger 2: Target comes ONLINE (Offline -> Online/Idle)
             if (config.alertOnOnline && previous.online === 'Offline' && (currentSnapshot.online === 'Online' || currentSnapshot.online === 'Idle')) {
                 playStakeoutAlarm('online');
                 sendStakeoutNotification(
@@ -281,7 +263,6 @@
                 );
             }
 
-            // Trigger 3: Target LANDS from Flight (Traveling -> Okay / Abroad)
             if (config.alertOnLanding && previous.state === 'Traveling' && currentSnapshot.state !== 'Traveling') {
                 playStakeoutAlarm('okay');
                 sendStakeoutNotification(
@@ -291,7 +272,6 @@
                 );
             }
 
-            // Trigger 4: Target reaches Full HP
             if (config.alertOnFullHp && previous.hpPct < 100 && currentSnapshot.hpPct >= 100) {
                 playStakeoutAlarm('online');
                 sendStakeoutNotification(
@@ -311,19 +291,17 @@
         updateRadarBadge();
     }
 
-    // --- 7. STYLES (Modern Dark Tactical Radar) ---
+    // --- 7. STYLES ---
     safeAddStyle(`
-        /* Stakeout Radar Floating Badge / Dock */
         #torn-stakeout-dock {
             position: fixed;
             bottom: 20px;
             right: 20px;
             z-index: 999999;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
             user-select: none;
         }
 
-        /* Minimized Pill */
         .stakeout-pill {
             display: inline-flex;
             align-items: center;
@@ -365,7 +343,6 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Expanded Window */
         .stakeout-window {
             width: 360px;
             max-width: 92vw;
@@ -416,7 +393,6 @@
             color: #ffffff;
         }
 
-        /* Target Add Bar */
         .stakeout-add-bar {
             display: flex;
             gap: 6px;
@@ -452,7 +428,6 @@
             background: #1d4ed8;
         }
 
-        /* Target Cards Container */
         .stakeout-list {
             flex: 1;
             overflow-y: auto;
@@ -469,7 +444,6 @@
             line-height: 1.5;
         }
 
-        /* Target Card */
         .stakeout-card {
             background: #1e293b;
             border: 1px solid #334155;
@@ -553,7 +527,6 @@
             color: #93c5fd;
         }
 
-        /* Health Bar */
         .stakeout-hp-bar-wrap {
             height: 14px;
             background: #0f172a;
@@ -587,7 +560,6 @@
             pointer-events: none;
         }
 
-        /* Attack Action Button */
         .stakeout-attack-btn {
             display: flex;
             align-items: center;
@@ -613,7 +585,6 @@
             animation: stakeoutPillPulse 1.2s infinite ease-in-out;
         }
 
-        /* Settings Drawer */
         .stakeout-settings {
             background: #0f172a;
             border-top: 1px solid #334155;
@@ -636,7 +607,6 @@
             height: 16px;
         }
 
-        /* Profile Page Quick Stakeout Button */
         .stakeout-profile-btn {
             display: inline-flex !important;
             align-items: center !important;
@@ -668,6 +638,8 @@
     let dockRoot = null;
 
     function renderRadarUI() {
+        if (!document.body) return;
+
         if (!dockRoot) {
             dockRoot = document.createElement('div');
             dockRoot.id = 'torn-mercenary-dock';
@@ -686,11 +658,14 @@
                     <span>Radar (${watchlist.length})${readyCount > 0 ? ` • ⚡ ${readyCount} READY` : ''}</span>
                 </div>
             `;
-            document.getElementById('stakeout-pill-toggle').onclick = () => {
-                config.isMinimized = false;
-                saveConfig();
-                renderRadarUI();
-            };
+            const toggleEl = document.getElementById('stakeout-pill-toggle');
+            if (toggleEl) {
+                toggleEl.onclick = () => {
+                    config.isMinimized = false;
+                    saveConfig();
+                    renderRadarUI();
+                };
+            }
             return;
         }
 
@@ -763,43 +738,68 @@
             </div>
         `;
 
-        // Bind Window Actions
-        document.getElementById('stakeout-btn-minimize').onclick = () => {
-            config.isMinimized = true;
-            saveConfig();
-            renderRadarUI();
-        };
+        const minBtn = document.getElementById('stakeout-btn-minimize');
+        if (minBtn) {
+            minBtn.onclick = () => {
+                config.isMinimized = true;
+                saveConfig();
+                renderRadarUI();
+            };
+        }
 
-        document.getElementById('stakeout-btn-pause').onclick = () => {
-            config.isPaused = !config.isPaused;
-            saveConfig();
-            renderRadarUI();
-        };
+        const pauseBtn = document.getElementById('stakeout-btn-pause');
+        if (pauseBtn) {
+            pauseBtn.onclick = () => {
+                config.isPaused = !config.isPaused;
+                saveConfig();
+                renderRadarUI();
+            };
+        }
 
         const settingsPanel = document.getElementById('stakeout-settings-panel');
-        document.getElementById('stakeout-btn-settings').onclick = () => {
-            settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'flex' : 'none';
-        };
+        const settingsBtn = document.getElementById('stakeout-btn-settings');
+        if (settingsBtn && settingsPanel) {
+            settingsBtn.onclick = () => {
+                settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'flex' : 'none';
+            };
+        }
 
-        // Bind Settings Toggles
-        document.getElementById('toggle-alert-okay').onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
-        document.getElementById('toggle-alert-online').onchange = (e) => { config.alertOnOnline = e.target.checked; saveConfig(); };
-        document.getElementById('toggle-alert-landing').onchange = (e) => { config.alertOnLanding = e.target.checked; saveConfig(); };
-        document.getElementById('toggle-alert-fullhp').onchange = (e) => { config.alertOnFullHp = e.target.checked; saveConfig(); };
-        document.getElementById('toggle-sound-alarm').onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
-        document.getElementById('toggle-desktop-notif').onchange = (e) => {
-            config.desktopNotif = e.target.checked;
-            saveConfig();
-            if (e.target.checked && 'Notification' in window && Notification.permission !== 'granted') {
-                Notification.requestPermission();
-            }
-        };
-        document.getElementById('toggle-auto-attack').onchange = (e) => { config.autoOpenAttack = e.target.checked; saveConfig(); };
-        document.getElementById('stakeout-btn-test-sound').onclick = () => playStakeoutAlarm('okay');
+        const tOkay = document.getElementById('toggle-alert-okay');
+        if (tOkay) tOkay.onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
 
-        // Bind Add Target
+        const tOnline = document.getElementById('toggle-alert-online');
+        if (tOnline) tOnline.onchange = (e) => { config.alertOnOnline = e.target.checked; saveConfig(); };
+
+        const tLanding = document.getElementById('toggle-alert-landing');
+        if (tLanding) tLanding.onchange = (e) => { config.alertOnLanding = e.target.checked; saveConfig(); };
+
+        const tFullHp = document.getElementById('toggle-alert-fullhp');
+        if (tFullHp) tFullHp.onchange = (e) => { config.alertOnFullHp = e.target.checked; saveConfig(); };
+
+        const tSound = document.getElementById('toggle-sound-alarm');
+        if (tSound) tSound.onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
+
+        const tNotif = document.getElementById('toggle-desktop-notif');
+        if (tNotif) {
+            tNotif.onchange = (e) => {
+                config.desktopNotif = e.target.checked;
+                saveConfig();
+                if (e.target.checked && 'Notification' in window && Notification.permission !== 'granted') {
+                    Notification.requestPermission();
+                }
+            };
+        }
+
+        const tAutoAttack = document.getElementById('toggle-auto-attack');
+        if (tAutoAttack) tAutoAttack.onchange = (e) => { config.autoOpenAttack = e.target.checked; saveConfig(); };
+
+        const testSoundBtn = document.getElementById('stakeout-btn-test-sound');
+        if (testSoundBtn) testSoundBtn.onclick = () => playStakeoutAlarm('okay');
+
         const inputEl = document.getElementById('stakeout-input-target');
+        const addBtn = document.getElementById('stakeout-btn-add');
         const handleAdd = () => {
+            if (!inputEl) return;
             const raw = inputEl.value.trim();
             if (!raw) return;
             const match = raw.match(/XID=(\d+)/) || raw.match(/user2ID=(\d+)/) || raw.match(/^(\d+)$/);
@@ -818,18 +818,20 @@
                 alert('Please enter a valid Torn Player ID or Profile URL.');
             }
         };
-        document.getElementById('stakeout-btn-add').onclick = handleAdd;
-        inputEl.onkeydown = (e) => { if (e.key === 'Enter') handleAdd(); };
 
-        // Render Cards
+        if (addBtn) addBtn.onclick = handleAdd;
+        if (inputEl) inputEl.onkeydown = (e) => { if (e.key === 'Enter') handleAdd(); };
+
         const listContainer = document.getElementById('stakeout-target-list');
-        watchlist.forEach(id => {
-            const card = document.createElement('div');
-            card.id = `stakeout-card-${id}`;
-            card.className = 'stakeout-card';
-            listContainer.appendChild(card);
-            updateTargetCardUI(id);
-        });
+        if (listContainer) {
+            watchlist.forEach(id => {
+                const card = document.createElement('div');
+                card.id = `stakeout-card-${id}`;
+                card.className = 'stakeout-card';
+                listContainer.appendChild(card);
+                updateTargetCardUI(id);
+            });
+        }
     }
 
     function updateRadarBadge() {
@@ -850,15 +852,19 @@
 
         const info = targetsCache[targetId];
         if (!info || !info.data) {
-            card.innerHTML = `
+            const emptyHtml = `
                 <div class="stakeout-card-header">
                     <span class="stakeout-card-name">🎯 Target [${targetId}]</span>
                     <button class="stakeout-btn-icon" data-del="${targetId}">✕</button>
                 </div>
                 <div style="font-size: 11px; color: #94a3b8;">Scanning telemetry...</div>
             `;
-            const delBtn = card.querySelector(`[data-del="${targetId}"]`);
-            if (delBtn) delBtn.onclick = () => removeTarget(targetId);
+            if (card.dataset.lastStateKey !== `pending_${targetId}`) {
+                card.dataset.lastStateKey = `pending_${targetId}`;
+                card.innerHTML = emptyHtml;
+                const delBtn = card.querySelector(`[data-del="${targetId}"]`);
+                if (delBtn) delBtn.onclick = () => removeTarget(targetId);
+            }
             return;
         }
 
@@ -866,6 +872,10 @@
         const nowSec = Math.floor(Date.now() / 1000);
         const remainingSec = d.until > nowSec ? d.until - nowSec : 0;
         const isOkay = d.state === 'Okay';
+
+        const stateKey = `${d.state}_${remainingSec}_${d.hpCurr}_${d.hpMax}_${d.online}`;
+        if (card.dataset.lastStateKey === stateKey) return;
+        card.dataset.lastStateKey = stateKey;
 
         card.className = `stakeout-card ${isOkay ? 'ready' : ''}`;
 
@@ -926,43 +936,45 @@
         updateProfilePageButton();
     }
 
-    // --- 9. PROFILE PAGE QUICK STAKEOUT BUTTON ---
+    // --- 9. PROFILE PAGE QUICK STAKEOUT BUTTON (Safe, Non-Looping) ---
     function updateProfilePageButton() {
         if (!window.location.href.includes('profiles.php')) return;
         const match = window.location.href.match(/XID=(\d+)/);
         if (!match) return;
         const profileId = match[1];
 
-        let btn = document.getElementById('stakeout-profile-action-btn');
         const isWatched = watchlist.includes(profileId);
+        let btn = document.getElementById('stakeout-profile-action-btn');
 
         if (!btn) {
+            const targetContainer = document.querySelector('.profile-container .basic-information, .profile-right-wrapper, .user-information, .profile-wrapper h4, .profile-wrapper');
+            if (!targetContainer) return;
+
             btn = document.createElement('button');
             btn.id = 'stakeout-profile-action-btn';
             btn.className = 'stakeout-profile-btn';
+            targetContainer.prepend(btn);
+        }
 
-            const targetContainer = document.querySelector('.profile-container .basic-information, .profile-right-wrapper, .profile-wrapper h4, .user-information');
-            if (targetContainer) {
-                targetContainer.prepend(btn);
+        const newText = isWatched ? `🎯 In Stakeout Radar (Click to Remove)` : `🎯 Add to Stakeout Radar`;
+        const newClass = `stakeout-profile-btn ${isWatched ? 'active' : ''}`;
+
+        if (btn.textContent !== newText) btn.textContent = newText;
+        if (btn.className !== newClass) btn.className = newClass;
+
+        btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (watchlist.includes(profileId)) {
+                removeTarget(profileId);
+            } else {
+                watchlist.push(profileId);
+                saveWatchlist();
+                renderRadarUI();
+                pollSingleTarget(profileId);
             }
-        }
-
-        if (btn) {
-            btn.className = `stakeout-profile-btn ${isWatched ? 'active' : ''}`;
-            btn.innerHTML = isWatched ? `🎯 In Stakeout Radar (Click to Remove)` : `🎯 Add to Stakeout Radar`;
-            btn.onclick = (e) => {
-                e.preventDefault();
-                if (isWatched) {
-                    removeTarget(profileId);
-                } else {
-                    watchlist.push(profileId);
-                    saveWatchlist();
-                    renderRadarUI();
-                    pollSingleTarget(profileId);
-                    updateProfilePageButton();
-                }
-            };
-        }
+            updateProfilePageButton();
+        };
     }
 
     // --- 10. POLLING SCHEDULER & RUNTIME ---
@@ -975,7 +987,6 @@
     async function pollNextWatchlistTarget() {
         if (config.isPaused || watchlist.length === 0) return;
 
-        // Check if any target has hospital timer < 60s for rapid poll
         let rapidTargetId = null;
         if (config.rapidHospPolling) {
             const nowSec = Math.floor(Date.now() / 1000);
@@ -994,30 +1005,42 @@
         await pollSingleTarget(targetToPoll);
     }
 
-    // Main lifecycle ticker
-    setInterval(pollNextWatchlistTarget, (config.pollingInterval || 5) * 1000);
+    function boot() {
+        if (!document.body) {
+            setTimeout(boot, 100);
+            return;
+        }
 
-    // Live 1-second countdown clock for hospital/flight badges
-    setInterval(() => {
-        if (config.isMinimized || watchlist.length === 0) return;
-        watchlist.forEach(id => updateTargetCardUI(id));
-    }, 1000);
-
-    // Initial boot
-    renderRadarUI();
-    updateProfilePageButton();
-
-    // Re-check profile page on AJAX/history navigation
-    window.addEventListener('popstate', updateProfilePageButton);
-    const observer = new MutationObserver(() => {
+        renderRadarUI();
         updateProfilePageButton();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
 
-    // Initial fetch for all targets on load
-    if (watchlist.length > 0) {
-        watchlist.forEach((id, idx) => {
-            setTimeout(() => pollSingleTarget(id), idx * 1500);
-        });
+        // Safe 1-second ticker for target UI and countdowns
+        setInterval(() => {
+            if (config.isMinimized || watchlist.length === 0) return;
+            watchlist.forEach(id => updateTargetCardUI(id));
+        }, 1000);
+
+        // Safe 2-second checker for profile button without any MutationObserver
+        setInterval(() => {
+            if (window.location.href.includes('profiles.php')) {
+                updateProfilePageButton();
+            }
+        }, 2000);
+
+        // Main poller
+        setInterval(pollNextWatchlistTarget, (config.pollingInterval || 5) * 1000);
+
+        // Initial fetch for all targets
+        if (watchlist.length > 0) {
+            watchlist.forEach((id, idx) => {
+                setTimeout(() => pollSingleTarget(id), idx * 1500);
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
     }
 })();
