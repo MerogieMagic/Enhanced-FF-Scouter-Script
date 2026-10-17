@@ -2151,6 +2151,40 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 14:58:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 101
+- **Focus**: Implementation of 1-Click Update Checker & Extension Menu Integration for Torn City - Mercenary Stakeout Radar (`v1.02`).
+  - **User Directive**:
+    - "add a check for update option"
+  - **Collaborative Requirements Alignment**:
+    - Provide instant, effortless update verification for the newly created Mercenary Stakeout Radar userscript directly from GitHub.
+    - Two user access surfaces:
+      1. *In-Game Radar Settings Drawer*: Prominent `[ 🔄 Check Updates ]` button next to `[ 🔊 Test Sound ]` with live version readout (`Radar v1.02`).
+      2. *Tampermonkey / Violentmonkey Extension Menu*: Native `GM_registerMenuCommand` integration (`🔄 Check for Radar Updates`, `🎯 Toggle Stakeout Radar Dock`, `🔑 Set / Change Torn API Key`).
+    - Non-blocking, visual toast notifications (`showStakeoutToast`) for checking status and latest version confirmation.
+    - Automatic 24-hour background update checks with timestamp caching.
+  - **Engineering Deliverables**:
+    1. *Metadata & Network Expansion*:
+       - Added `@grant GM_registerMenuCommand` and `@grant GM_xmlhttpRequest`.
+       - Added `@connect raw.githubusercontent.com`.
+       - Added `@downloadURL` and `@updateURL` pointing directly to the GitHub main branch repository.
+    2. *Version Comparison Engine (`isNewerVersion`)*:
+       - Implemented dot-delimited integer token comparison supporting arbitrary semantic versioning depths without floating-point inaccuracies.
+    3. *Update Execution Engine (`checkForScriptUpdates`)*:
+       - Fetches cache-busted `torn_mercenary_stakeout.meta.js?t={timestamp}` via `GM_xmlhttpRequest` with automatic fallback to native `fetch`.
+       - If a newer release is detected, triggers a browser `confirm()` dialogue displaying current vs latest version.
+       - Upon confirmation, opens `SCRIPT_RAW_URL` in a new tab, immediately activating Tampermonkey / Violentmonkey's native 1-click update/install interface.
+       - If already up to date, displays a friendly toast: `✅ You are using the latest version (v1.02)!`.
+    4. *Tactical Toast System (`showStakeoutToast`)*:
+       - Zero-dependency floating HUD toast (`#stakeout-toast`) anchored at `bottom: 75px; right: 20px` with fade-in animation and dismiss button.
+    5. *Files Updated & Version Bump*:
+       - `torn_mercenary_stakeout.user.js` (bumped to **v1.02**)
+       - `torn_mercenary_stakeout.meta.js` (bumped to **v1.02**)
+  - **Verification**:
+    - Syntax verification via `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-17 15:03:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
 

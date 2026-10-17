@@ -1,13 +1,18 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.01
+// @version      1.02
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_registerMenuCommand
+// @grant        GM_xmlhttpRequest
+// @connect      raw.githubusercontent.com
+// @downloadURL  https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js
+// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js
 // @run-at       document-end
 // ==/UserScript==
 
@@ -18,7 +23,134 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    // --- 1. STORAGE & POLYFILLS ---
+    const SCRIPT_VERSION = "1.02";
+    const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
+    const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
+
+    // --- 1. TOAST NOTIFICATION & UPDATE ENGINE ---
+    function showStakeoutToast(message) {
+        try {
+            const existing = document.getElementById('stakeout-toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'stakeout-toast';
+            toast.innerHTML = `
+                <span>${message}</span>
+                <span id="stakeout-toast-close" style="cursor: pointer; margin-left: 8px; font-weight: bold; font-size: 16px; color: #94a3b8;">×</span>
+            `;
+            const closeBtn = toast.querySelector('#stakeout-toast-close');
+            if (closeBtn) closeBtn.onclick = () => toast.remove();
+
+            document.body.appendChild(toast);
+            setTimeout(() => { if (toast.parentNode) toast.remove(); }, 4000);
+        } catch (e) {
+            console.log('[Stakeout Toast]', message);
+        }
+    }
+
+    function isNewerVersion(remote, local) {
+        const rParts = String(remote).split('.').map(n => parseInt(n, 10) || 0);
+        const lParts = String(local).split('.').map(n => parseInt(n, 10) || 0);
+        const len = Math.max(rParts.length, lParts.length);
+        for (let i = 0; i < len; i++) {
+            const r = rParts[i] || 0;
+            const l = lParts[i] || 0;
+            if (r > l) return true;
+            if (r < l) return false;
+        }
+        return false;
+    }
+
+    function checkForScriptUpdates(manual = false) {
+        if (manual) {
+            showStakeoutToast('🔄 Checking GitHub for radar updates...');
+        }
+
+        const checkUrl = `${SCRIPT_META_URL}?t=${Date.now()}`;
+        const handleResponseText = (responseText) => {
+            try {
+                const versionMatch = responseText.match(/@version\s+([0-9.]+)/);
+                if (!versionMatch) {
+                    if (manual) showStakeoutToast('⚠️ Could not parse remote version from GitHub.');
+                    return;
+                }
+                const remoteVersion = versionMatch[1].trim();
+                setStorage('last_update_check_time', Date.now());
+
+                if (isNewerVersion(remoteVersion, SCRIPT_VERSION)) {
+                    const confirmed = confirm(
+                        `🎯 Torn City - Mercenary Stakeout Radar Update Available!\n\n` +
+                        `Current Version: v${SCRIPT_VERSION}\n` +
+                        `Latest Version:  v${remoteVersion}\n\n` +
+                        `Click OK to open Tampermonkey/Violentmonkey installer and update now.`
+                    );
+                    if (confirmed) {
+                        showStakeoutToast(`🚀 Opening v${remoteVersion} installer...`);
+                        window.open(SCRIPT_RAW_URL, '_blank');
+                    }
+                } else {
+                    if (manual) {
+                        showStakeoutToast(`✅ You are using the latest version (v${SCRIPT_VERSION})!`);
+                    }
+                }
+            } catch (e) {
+                console.error('[Stakeout] Update check error:', e);
+                if (manual) showStakeoutToast(`⚠️ Error checking updates: ${e.message}`);
+            }
+        };
+
+        if (typeof GM_xmlhttpRequest === 'function') {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: checkUrl,
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache'
+                },
+                onload: function (res) {
+                    if (res.status === 200 && res.responseText) {
+                        handleResponseText(res.responseText);
+                    } else {
+                        if (manual) showStakeoutToast(`⚠️ Update check failed (HTTP ${res.status})`);
+                    }
+                },
+                onerror: function (err) {
+                    console.error('[Stakeout] GM_xmlhttpRequest error, trying fetch fallback:', err);
+                    fetch(checkUrl, { cache: 'no-store' })
+                        .then(r => r.text())
+                        .then(handleResponseText)
+                        .catch(() => {
+                            if (manual) showStakeoutToast('⚠️ Network error while checking for updates.');
+                        });
+                }
+            });
+        } else {
+            fetch(checkUrl, { cache: 'no-store' })
+                .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.text();
+                })
+                .then(handleResponseText)
+                .catch(err => {
+                    console.error('[Stakeout] Fetch update error:', err);
+                    if (manual) showStakeoutToast('⚠️ Network error while checking for updates.');
+                });
+        }
+    }
+
+    function autoCheckForUpdates() {
+        try {
+            const lastCheck = getStorage('last_update_check_time', 0);
+            const now = Date.now();
+            const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+            if (now - lastCheck > TWENTY_FOUR_HOURS) {
+                checkForScriptUpdates(false);
+            }
+        } catch (e) {}
+    }
+
+    // --- 2. STORAGE & POLYFILLS ---
     function safeAddStyle(css) {
         try {
             if (typeof GM_addStyle === 'function') {
@@ -632,6 +764,29 @@
             border-color: #22c55e !important;
             color: #86efac !important;
         }
+
+        #stakeout-toast {
+            position: fixed;
+            bottom: 75px;
+            right: 20px;
+            background: #0f172a;
+            border: 1px solid #38bdf8;
+            color: #f8fafc;
+            padding: 9px 15px;
+            border-radius: 8px;
+            font-size: 12.5px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+            z-index: 2147483647;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: stakeoutToastFadeIn 0.2s ease-out;
+        }
+        @keyframes stakeoutToastFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     `);
 
     // --- 8. UI BUILDER & DOCK ---
@@ -725,10 +880,12 @@
                         <input type="checkbox" id="toggle-auto-attack" ${config.autoOpenAttack ? 'checked' : ''} />
                     </label>
                     <div style="display: flex; gap: 6px; margin-top: 4px;">
-                        <button class="stakeout-btn-icon" id="stakeout-btn-test-sound" style="flex: 1; padding: 5px;">🔊 Test Alarm Sound</button>
+                        <button class="stakeout-btn-icon" id="stakeout-btn-test-sound" style="flex: 1; padding: 5px;" title="Test Synthesized Alarm Sound">🔊 Test Sound</button>
+                        <button class="stakeout-btn-icon" id="stakeout-btn-check-update" style="flex: 1; padding: 5px; border-color: #38bdf8; color: #38bdf8;" title="Check GitHub for Script Updates">🔄 Check Updates</button>
                     </div>
-                    <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">
-                        Rate Limit: ${callRate}/90 calls/min • Polling: Every ${config.pollingInterval}s
+                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 2px;">
+                        <span>Radar v${SCRIPT_VERSION}</span>
+                        <span>Rate: ${callRate}/90 cpm • Poll: ${config.pollingInterval}s</span>
                     </div>
                 </div>
 
@@ -795,6 +952,9 @@
 
         const testSoundBtn = document.getElementById('stakeout-btn-test-sound');
         if (testSoundBtn) testSoundBtn.onclick = () => playStakeoutAlarm('okay');
+
+        const checkUpdateBtn = document.getElementById('stakeout-btn-check-update');
+        if (checkUpdateBtn) checkUpdateBtn.onclick = () => checkForScriptUpdates(true);
 
         const inputEl = document.getElementById('stakeout-input-target');
         const addBtn = document.getElementById('stakeout-btn-add');
@@ -1036,6 +1196,27 @@
                 setTimeout(() => pollSingleTarget(id), idx * 1500);
             });
         }
+
+        // Silent background update check once every 24h
+        setTimeout(autoCheckForUpdates, 3500);
+    }
+
+    // Register Tampermonkey / Violentmonkey extension menu commands
+    if (typeof GM_registerMenuCommand !== 'undefined') {
+        GM_registerMenuCommand('🔄 Check for Radar Updates', () => checkForScriptUpdates(true));
+        GM_registerMenuCommand('🎯 Toggle Stakeout Radar Dock', () => {
+            config.isMinimized = !config.isMinimized;
+            saveConfig();
+            renderRadarUI();
+        });
+        GM_registerMenuCommand('🔑 Set / Change Torn API Key', () => {
+            const curKey = getApiKey();
+            const input = prompt('Enter Torn API Key for Mercenary Stakeout Radar:', curKey);
+            if (input !== null) {
+                setStorage('api_key', input.trim());
+                showStakeoutToast('API Key saved successfully!');
+            }
+        });
     }
 
     if (document.readyState === 'loading') {
