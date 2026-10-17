@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      3.05
+// @version      3.06
 // @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = "3.05";
+    const SCRIPT_VERSION = "3.06";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -659,29 +659,22 @@
             color: #38bdf8 !important;
         }
 
-        /* Direct Life Bar Numerical Overlay (0% Layout Distortion) */
-        .ff-life-bar-text {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            font-size: 11px !important;
-            font-weight: 800 !important;
-            font-family: monospace, monospace !important;
-            color: #ffffff !important;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9) !important;
-            pointer-events: none !important;
-            z-index: 10 !important;
-            letter-spacing: 0.3px !important;
+        /* Simple (hp / maxhp) next to player name (0% layout distortion) */
+        .ff-player-hp-simple {
+            display: inline !important;
+            font-size: 0.88em !important;
+            font-weight: 600 !important;
+            margin-left: 6px !important;
+            letter-spacing: 0.2px !important;
             white-space: nowrap !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9) !important;
+            pointer-events: none !important;
+            vertical-align: baseline !important;
         }
 
         .ff-player-hp-badge,
-        .ff-attack-hp-hud {
+        .ff-attack-hp-hud,
+        .ff-life-bar-text {
             display: none !important;
         }
 
@@ -1803,41 +1796,87 @@
         return null;
     }
 
-    function updateFighterLifeBarText(cardEl, hpInfo) {
-        if (!cardEl || !hpInfo) return;
+    function findPlayerNameElement(cardEl, isAttacker, knownName) {
+        if (!cardEl) return null;
 
-        const barEl = findLifeBarElement(cardEl);
-        if (!barEl) return;
+        const isExcluded = (el) => !!el.closest('[class*="weapon"], [class*="equip"], [class*="item"], [class*="cooldown"], [class*="action"], [class*="model"], [class*="loadout"], [class*="btn"], button');
 
-        if (getComputedStyle(barEl).position === 'static') {
-            barEl.style.position = 'relative';
+        if (knownName && typeof knownName === 'string' && knownName.trim().length > 0) {
+            const candidates = cardEl.querySelectorAll('span, div, p, h4, h3, a');
+            for (const el of candidates) {
+                if (isExcluded(el)) continue;
+                const text = Array.from(el.childNodes)
+                    .filter(node => node.nodeType === Node.TEXT_NODE)
+                    .map(node => node.textContent)
+                    .join('')
+                    .trim();
+                if (text === knownName || text.startsWith(knownName)) {
+                    return el;
+                }
+            }
         }
 
-        let textEl = barEl.querySelector('.ff-life-bar-text');
-        if (!textEl) {
-            textEl = document.createElement('div');
-            textEl.className = 'ff-life-bar-text';
-            barEl.appendChild(textEl);
+        const headerCandidates = cardEl.querySelectorAll('[class*="userName___"], [class*="user___"], [class*="name___"], [class*="header___"], [class*="title___"]');
+        for (const el of headerCandidates) {
+            if (isExcluded(el)) continue;
+            const text = (el.textContent || '').trim();
+            if (/^(Primary|Secondary|Melee|Temporary|Weapon|Defend|Attack|Actions?)$/i.test(text)) continue;
+            if (text.length > 0 && text.length < 35) {
+                return el;
+            }
+        }
+
+        return null;
+    }
+
+    function updateFighterNameHp(cardEl, hpInfo, isAttacker, knownName) {
+        if (!cardEl || !hpInfo) return;
+
+        const nameEl = findPlayerNameElement(cardEl, isAttacker, knownName);
+        if (!nameEl) return;
+
+        let hpSpan = nameEl.querySelector('.ff-player-hp-simple');
+        if (!hpSpan) {
+            if (nameEl.nextElementSibling?.classList.contains('ff-player-hp-simple')) {
+                hpSpan = nameEl.nextElementSibling;
+            } else {
+                hpSpan = document.createElement('span');
+                hpSpan.className = 'ff-player-hp-simple';
+                if (nameEl.tagName === 'SPAN' || nameEl.tagName === 'A') {
+                    nameEl.parentNode.insertBefore(hpSpan, nameEl.nextSibling);
+                } else {
+                    nameEl.appendChild(hpSpan);
+                }
+            }
         }
 
         let hpText = '';
         if (hpInfo.maximum > 0) {
-            const pctStr = hpInfo.percent.toFixed(hpInfo.percent % 1 === 0 ? 0 : 1);
-            hpText = `${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()} (${pctStr}%)`;
-        } else {
-            hpText = `${hpInfo.percent.toFixed(1)}%`;
+            hpText = ` (${hpInfo.current.toLocaleString()} / ${hpInfo.maximum.toLocaleString()})`;
+        } else if (hpInfo.percent != null) {
+            hpText = ` (${Math.round(hpInfo.percent)}%)`;
         }
 
-        if (textEl.dataset.lastText === hpText) return;
-        textEl.dataset.lastText = hpText;
-        textEl.textContent = hpText;
+        if (hpSpan.dataset.lastText === hpText) return;
+        hpSpan.dataset.lastText = hpText;
+        hpSpan.textContent = hpText;
+
+        if (hpInfo.percent <= 0) {
+            hpSpan.style.color = '#94a3b8';
+        } else if (hpInfo.percent <= 20) {
+            hpSpan.style.color = '#ef4444';
+        } else if (hpInfo.percent <= 50) {
+            hpSpan.style.color = '#facc15';
+        } else {
+            hpSpan.style.color = '#4ade80';
+        }
     }
 
     function updateAttackHpDisplay() {
         if (!window.location.href.includes("sid=attack")) return;
 
-        // Cleanup any legacy badges or HUD that might distort layouts
-        const legacyBadges = document.querySelectorAll('.ff-player-hp-badge');
+        // Cleanup any legacy badges, HUD, or in-bar text overlays
+        const legacyBadges = document.querySelectorAll('.ff-player-hp-badge, .ff-life-bar-text');
         legacyBadges.forEach(b => b.remove());
         const legacyHud = document.getElementById('ff-attack-hp-hud');
         if (legacyHud) legacyHud.remove();
@@ -1858,17 +1897,19 @@
         const targetId = getAttackTargetId();
         const cachedTargetLife = targetId ? (targetLifeData[targetId] || getCachedTargetLife(targetId)) : null;
         const defenderMaxHp = cachedTargetLife?.maximum || 0;
+        const defenderName = cachedTargetLife?.name || (defenderCard?.querySelector('[class*="header___"], [class*="title___"], h4, .header, [class*="userName___"]')?.textContent?.trim() || null);
 
         const attackerMaxHp = getAttackerMaxHp();
+        const attackerName = getMyPlayerName();
 
         if (attackerCard) {
             const attackerHp = getFighterHpInfo(attackerCard, attackerMaxHp, true);
-            if (attackerHp) updateFighterLifeBarText(attackerCard, attackerHp);
+            if (attackerHp) updateFighterNameHp(attackerCard, attackerHp, true, attackerName);
         }
 
         if (defenderCard) {
             const defenderHp = getFighterHpInfo(defenderCard, defenderMaxHp, false);
-            if (defenderHp) updateFighterLifeBarText(defenderCard, defenderHp);
+            if (defenderHp) updateFighterNameHp(defenderCard, defenderHp, false, defenderName);
         }
     }
 

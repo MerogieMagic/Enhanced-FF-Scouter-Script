@@ -2400,3 +2400,34 @@ Extracted directly via Torn API stock market endpoints:
       - `node --check tornpda_war_enhanced.meta.js` (exit code 0)
   - **Date & Time**: 2026-10-17 22:06:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 108
+- **Focus**: Streamlined Attack Screen HP Display to Minimalist Inline `(hp / maxhp)` Attached Directly to Fighter Names in `ff_scouter_bs_enhanced.user.js` (`v3.06`) and `tornpda_war_enhanced.user.js` (`v9.9`).
+  - **User Directive**:
+    - "i was thinking a simple (hp / maxhp) next to the name will suffice" -> User selected "option 1." (applying this strictly to the Attack Screen).
+  - **Architectural & Design Principles**:
+    1. *Zero-Distortion Inline Text (`.ff-player-hp-simple`)*:
+       - Discarded complex in-bar overlays and external badge cards.
+       - Implemented clean inline `<span>` elements attached directly beside the player's name text on both fighter cards:
+         - Attacker Card: `Merogie (2,047 / 3,937)`
+         - Defender Card: `LinkxHylian (1,286 / 1,286)`
+       - Styled with `display: inline !important; font-size: 0.88em !important; font-weight: 600 !important; margin-left: 6px !important; vertical-align: baseline !important; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9) !important; pointer-events: none !important;`.
+       - Never applies `display: flex` or `justify-content: space-between` to player name containers, permanently preventing `Merogie` from shrinking into `M...`.
+       - Strictly excludes weapon, equipment, item, cooldown, and button nodes from DOM queries via `isExcluded` guard in `findPlayerNameElement`.
+    2. *Context-Aware Color Coding*:
+       - Healthy (>50% HP): `#4ade80` (vibrant green)
+       - Wounded (21% - 50% HP): `#facc15` (amber / warning)
+       - Critical (<=20% HP): `#ef4444` (danger red)
+       - Down / Defeated (<=0% HP): `#94a3b8` (muted slate)
+    3. *Clean DOM Hygiene*:
+       - Automatically sweeps and purges any legacy `.ff-player-hp-badge`, `#ff-attack-hp-hud`, or `.ff-life-bar-text` elements.
+    4. *Versions & Parity*:
+       - Bumped `ff_scouter_bs_enhanced.user.js` to **v3.06**.
+       - Bumped `tornpda_war_enhanced.user.js` and `tornpda_war_enhanced.meta.js` to **v9.9**.
+  - **Verification**:
+    - Validated syntax on all modified scripts:
+      - `node --check ff_scouter_bs_enhanced.user.js` (exit code 0)
+      - `node --check tornpda_war_enhanced.user.js` (exit code 0)
+      - `node --check tornpda_war_enhanced.meta.js` (exit code 0)
+  - **Date & Time**: 2026-10-17 22:25:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
