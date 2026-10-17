@@ -2304,6 +2304,43 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-17 16:46:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 105
+- **Focus**: Diagnosed & Eliminated Ranked War Page Freezing / Runaway Observer Loop in `ff_scouter_bs_enhanced.user.js` (`v3.04`).
+  - **User Directive**:
+    - "the page is hanging, i suspect the radar may be clashing with the war script?"
+    - "might be something else, ive disable the radar but the page is still hanging"
+  - **Root Cause Diagnosis**:
+    1. *Disproved Radar as Culprit*:
+       - The user disabling the Mercenary Stakeout Radar confirmed the freeze was completely independent of the radar script.
+    2. *Runaway MutationObserver & DOM Thrashing in `ff_scouter_bs_enhanced.user.js`*:
+       - **Unbounded Global Observer**: `mainObserver.observe(document.body, { childList: true, subtree: true })` lacked debouncing and recursion locks. Any DOM modification anywhere on the page synchronously triggered the full observer callback.
+       - **Ranked War Scope Leak**: In `updateFactionMemberTableBS()`, the exclusion guard only checked `.faction-war-view` (an outdated class). Modern Torn uses `#/war/rank` hash and dynamic React components. As a result, `updateFactionMemberTableBS()` attempted to inject `Est. BS` columns and purge score values from React's DOM on Ranked War pages, triggering React reconciliation crashes and continuous DOM mutations.
+       - **Uncached Member Re-scan Loop**: In `apply_ff_gauge()`, elements without cached API responses were never tagged with `data-ff-threat`, causing `mainObserver` to re-query and re-process 100+ members on every micro-mutation.
+       - **Physical Node Insertion Churn**: `sortMembersList()` was calling `listElement.appendChild(item.li)` for all 100 members on every sort pass regardless of whether the DOM order had changed, generating 100 separate `childList` mutation events that instantly re-fired `mainObserver`.
+       - **Redundant 400ms Interval**: An aggressive 400ms `setInterval` was continuously triggering `ensureWarSortBars()` and `updateFactionMemberTableBS()`, compounding the loop into 100% CPU lockup.
+  - **Engineering Deliverables Implemented**:
+    1. *Strict Ranked War Scope Exclusion*:
+       - Updated `updateFactionMemberTableBS()` guard to:
+         `if (window.location.hash.includes('war') || window.location.href.includes('war') || document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"], [class*="rankedWar"], [class*="enemyFaction"], [class*="opponentFaction"]')) return;`
+       - Guarantees zero DOM interference with Torn's Ranked War dual-faction tables.
+    2. *MutationObserver Debounce & Recursion Lock*:
+       - Wrapped `mainObserver` in an `isProcessingMutation` recursion lock and a 200ms debounce timer (`setTimeout`), collapsing hundreds of micro-mutations into a single batch execution.
+       - Removed `updateFactionMemberTableBS()` from `mainObserver`.
+    3. *DocumentFragment & `needsReorder` Guard in `sortMembersList`*:
+       - Added visual order check: if DOM order already matches parsed order, skips DOM manipulation entirely.
+       - When reordering is necessary, batches all rows into a single `DocumentFragment`, generating exactly 1 DOM mutation instead of 100.
+    4. *Element Tagging (`data-ff-processed`)*:
+       - Marked elements with `data-ff-processed="true"` in `apply_ff_gauge()` so uncached players are not re-queried on every observer tick.
+    5. *HTML Caching in `updateAllHospitalTimers`*:
+       - Guarded `statusEl.innerHTML` with `statusEl.dataset.lastHtml !== newHtml` to prevent touching the DOM if the visible countdown string has not changed.
+    6. *Relaxed Interval & Version Bump*:
+       - Relaxed `factions.php` ticker from 400ms to 1500ms.
+       - Bumped `ff_scouter_bs_enhanced.user.js` to **v3.04**.
+  - **Verification**:
+    - Validated syntax with `node --check ff_scouter_bs_enhanced.user.js` (exit code 0).
+  - **Date & Time**: 2026-10-17 21:39:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
 
 
 

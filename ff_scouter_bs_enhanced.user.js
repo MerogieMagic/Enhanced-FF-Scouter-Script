@@ -2,7 +2,7 @@
 // @name         FF Scouter V2 + BS Threat Border + War Stuff Enhanced
 // @namespace    Violentmonkey Scripts
 // @match        https://www.torn.com/*
-// @version      3.03
+// @version      3.04
 // @author       rDacted, Weav3r, xentac - modded by Merogie & Antigravity
 // @description  Combines Battle Stats Threat Borders, Est. BS sorting, Travel Status, Hospitalization Timers & Smart War Sorting
 // @grant        GM_xmlhttpRequest
@@ -23,7 +23,7 @@
 (function () {
     'use strict';
 
-    const SCRIPT_VERSION = "3.03";
+    const SCRIPT_VERSION = "3.04";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/ff_scouter_bs_enhanced.user.js";
     const API_INTERVAL = 15000; // 15s refresh for war/faction API status
     const BASE_FF_URL = "https://ffscouter.com";
@@ -2057,21 +2057,27 @@
             const remainingSec = cached.until > nowSec ? cached.until - nowSec : 0;
             const fullTooltip = `${cached.desc}${cached.lastAction ? ` • Last Action: ${cached.lastAction}` : ''}`;
 
+            let newHtml = '';
             if (cached.state === 'Hospital') {
                 if (remainingSec <= 0) {
-                    statusEl.innerHTML = `<a href="/page.php?sid=attack&user2ID=${userID}" class="hosp-timer-badge unexpected-okay" title="${fullTooltip} • Click to open Attack screen">00:00</a>`;
+                    newHtml = `<a href="/page.php?sid=attack&user2ID=${userID}" class="hosp-timer-badge unexpected-okay" title="${fullTooltip} • Click to open Attack screen">00:00</a>`;
                 } else {
                     const isNearExpiry = remainingSec <= 300;
                     const nearClass = isNearExpiry ? 'near-expiry' : '';
-                    statusEl.innerHTML = `<a href="/page.php?sid=attack&user2ID=${userID}" class="hosp-timer-badge ${nearClass}" title="${fullTooltip} • Click to open Attack screen">${formatTime(remainingSec)}</a>`;
+                    newHtml = `<a href="/page.php?sid=attack&user2ID=${userID}" class="hosp-timer-badge ${nearClass}" title="${fullTooltip} • Click to open Attack screen">${formatTime(remainingSec)}</a>`;
                 }
             } else if (cached.state === 'Traveling') {
                 const dest = parseTravelDestination(cached.desc);
                 const timeStr = remainingSec > 0 ? ` ${formatTime(remainingSec)}` : '';
-                statusEl.innerHTML = `<span class="travel-status-badge traveling" title="${fullTooltip}">✈ ${dest}${timeStr}</span>`;
+                newHtml = `<span class="travel-status-badge traveling" title="${fullTooltip}">✈ ${dest}${timeStr}</span>`;
             } else if (cached.state === 'Abroad') {
                 const loc = parseAbroadLocation(cached.desc);
-                statusEl.innerHTML = `<span class="travel-status-badge abroad" title="${fullTooltip}">${loc}</span>`;
+                newHtml = `<span class="travel-status-badge abroad" title="${fullTooltip}">${loc}</span>`;
+            }
+
+            if (newHtml && statusEl.dataset.lastHtml !== newHtml) {
+                statusEl.dataset.lastHtml = newHtml;
+                statusEl.innerHTML = newHtml;
             }
         });
 
@@ -2320,11 +2326,28 @@
                 });
             }
 
-            // Dual reordering: assign CSS flex order AND physically re-append in sorted order
-            parsed.forEach((item, rank) => {
-                item.li.style.order = String(rank + 1);
-                listElement.appendChild(item.li);
-            });
+            // Dual reordering: assign CSS flex order AND physically re-append ONLY if order changed
+            let needsReorder = false;
+            const currentChildren = Array.from(listElement.children);
+            for (let i = 0; i < parsed.length; i++) {
+                if (currentChildren[i] !== parsed[i].li) {
+                    needsReorder = true;
+                    break;
+                }
+            }
+
+            if (needsReorder) {
+                const fragment = document.createDocumentFragment();
+                parsed.forEach((item, rank) => {
+                    item.li.style.order = String(rank + 1);
+                    fragment.appendChild(item.li);
+                });
+                listElement.appendChild(fragment);
+            } else {
+                parsed.forEach((item, rank) => {
+                    item.li.style.order = String(rank + 1);
+                });
+            }
         } finally {
             isSortingList = false;
         }
@@ -2466,7 +2489,7 @@
         // STRICT SCOPE: Execute on all Faction rosters (step=profile, step=your, #faction-info).
         // NEVER execute on Ranked War, War Views, or static directory listings (step=listing).
         if (!window.location.href.includes("factions.php") || isListingPage()) return;
-        if (document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"]')) return;
+        if (window.location.hash.includes('war') || window.location.href.includes('war') || document.querySelector('.faction-war-view, .war-view, [class*="factionWarView"], [class*="warView"], [class*="rankedWar"], [class*="enemyFaction"], [class*="opponentFaction"]')) return;
 
         // 1. Purge stray non-row estimate lines (Ironclad protection for all player rows)
         $(".table-body > li:not(.table-row), .table-body > div:not(.table-row), .table-body [class*='estimate']:not(.ff-scouter-bs-badge):not(.ff-bs-col), .members-list [class*='estimate']:not(.ff-scouter-bs-badge):not(.ff-bs-col)").each(function() {
@@ -2681,14 +2704,14 @@
         if (window.location.href.includes("factions.php") && !isListingPage()) {
             updateFactionMemberTableBS();
         }
-        refreshActiveSorts();
     }
 
     async function apply_ff_gauge(elements) {
-        elements = elements.filter(e => !e.hasAttribute('data-ff-threat'));
+        elements = elements.filter(e => !e.hasAttribute('data-ff-threat') && !e.hasAttribute('data-ff-processed'));
         elements = elements.map(e => [get_player_id_in_element(e), e]).filter(e => e[0]);
 
         if (elements.length > 0) {
+            elements.forEach(([pid, el]) => el.setAttribute('data-ff-processed', 'true'));
             show_cached_values(elements);
             const player_ids = elements.map(e => e[0]);
             update_ff_cache(player_ids, () => {
@@ -3331,44 +3354,59 @@
         queueFactionListingProcess(300);
     }
 
-    const mainObserver = new MutationObserver(async function () {
-        if (isListingPage()) {
-            queueFactionListingProcess(150);
-            return;
-        }
-        const honor_bars = $(".honor-text-wrap").toArray();
-        if (honor_bars.length > 0) {
-            await apply_ff_gauge(honor_bars);
-        } else {
-            if (window.location.href.includes("factions.php")) {
-                await apply_ff_gauge($(".member").toArray());
-            } else if (window.location.href.includes("companies.php") || window.location.href.includes("joblist.php")) {
-                await apply_ff_gauge($(".employee").toArray());
-            } else if (window.location.href.includes("messages.php") || window.location.href.includes("index.php") || window.location.href.includes("hospitalview.php") || window.location.href.includes("sid=UserList")) {
-                await apply_ff_gauge($(".name").toArray());
-            } else if (window.location.href.includes("bounties.php")) {
-                await apply_ff_gauge($(".target, .listed").toArray());
-            } else if (window.location.href.includes("forums.php")) {
-                await apply_ff_gauge($(".last-poster, .starter, .last-post, .poster").toArray());
-            } else if (window.location.href.includes("sid=competition")) {
-                await apply_ff_gauge($('[class*="name___"] .honor-text-wrap, [class*="name___"] a').toArray());
-            }
-        }
+    let isProcessingMutation = false;
+    let mutationDebounceTimer = null;
 
-        const mini_profiles = $('[class^="profile-mini-_userProfileWrapper_"]').toArray();
-        for (const mini of mini_profiles) {
-            if (!mini.classList.contains('ff-processed')) {
-                mini.classList.add('ff-processed');
-                const player_id = get_player_id_in_element(mini);
-                apply_to_mini_profile(mini);
-                if (player_id) update_ff_cache([player_id], () => apply_to_mini_profile(mini));
-            }
-        }
+    const mainObserver = new MutationObserver(function () {
+        if (isProcessingMutation) return;
 
-        if (window.location.href.includes("factions.php")) {
-            updateFactionMemberTableBS();
-            ensureWarSortBars();
-        }
+        if (mutationDebounceTimer) clearTimeout(mutationDebounceTimer);
+        mutationDebounceTimer = setTimeout(async () => {
+            if (isProcessingMutation) return;
+            isProcessingMutation = true;
+            try {
+                if (isListingPage()) {
+                    queueFactionListingProcess(150);
+                    return;
+                }
+                const honor_bars = $(".honor-text-wrap").toArray();
+                if (honor_bars.length > 0) {
+                    await apply_ff_gauge(honor_bars);
+                } else {
+                    if (window.location.href.includes("factions.php")) {
+                        await apply_ff_gauge($(".member").toArray());
+                    } else if (window.location.href.includes("companies.php") || window.location.href.includes("joblist.php")) {
+                        await apply_ff_gauge($(".employee").toArray());
+                    } else if (window.location.href.includes("messages.php") || window.location.href.includes("index.php") || window.location.href.includes("hospitalview.php") || window.location.href.includes("sid=UserList")) {
+                        await apply_ff_gauge($(".name").toArray());
+                    } else if (window.location.href.includes("bounties.php")) {
+                        await apply_ff_gauge($(".target, .listed").toArray());
+                    } else if (window.location.href.includes("forums.php")) {
+                        await apply_ff_gauge($(".last-poster, .starter, .last-post, .poster").toArray());
+                    } else if (window.location.href.includes("sid=competition")) {
+                        await apply_ff_gauge($('[class*="name___"] .honor-text-wrap, [class*="name___"] a').toArray());
+                    }
+                }
+
+                const mini_profiles = $('[class^="profile-mini-_userProfileWrapper_"]').toArray();
+                for (const mini of mini_profiles) {
+                    if (!mini.classList.contains('ff-processed')) {
+                        mini.classList.add('ff-processed');
+                        const player_id = get_player_id_in_element(mini);
+                        apply_to_mini_profile(mini);
+                        if (player_id) update_ff_cache([player_id], () => apply_to_mini_profile(mini));
+                    }
+                }
+
+                if (window.location.href.includes("factions.php")) {
+                    if (!document.querySelector('.ff-war-sort-toolbar')) {
+                        ensureWarSortBars();
+                    }
+                }
+            } finally {
+                isProcessingMutation = false;
+            }
+        }, 200);
     });
 
     mainObserver.observe(document.body, { childList: true, subtree: true });
@@ -3385,7 +3423,7 @@
         setInterval(() => {
             updateFactionMemberTableBS();
             ensureWarSortBars();
-        }, 400);
+        }, 1500);
     }
 
     // Background auto-check for updates (once every 24h, 3s after startup)
