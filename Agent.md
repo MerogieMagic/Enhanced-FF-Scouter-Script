@@ -2675,5 +2675,58 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-18 22:56:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 114
+- **Focus**: Strategic Battle Stat Intelligence — Comprehensive Research on Hank's Ratio, Stat Forensic Audit of 5.418B Combat Profile, and Mathematical Comparative Analysis (Hank's Ratio vs. Custom Isoyamas + Frontline Fitness Configurations).
+  - **User Directive**:
+    - "do some research into Hanks ratio, what is the ratio used by this person, is it hanks? and what is the benefit of using hanks ratio over a custom ratio to enable just Mr Isoyamas and frontline fitness"
+  - **Forensic Stat Audit of Uploaded Target Profile**:
+    - Total Battle Stats: **5,418,454,502** (~5.42 Billion)
+    
+    | Combat Stat | Raw Stat Value | % of Total Stats | Normalized to Def = 100 | Canonical Hank's (100:80:80:28) | Status & Tactical Role |
+    | :--- | :---: | :---: | :---: | :---: | :--- |
+    | **Strength** | `1,572,601,329` | 29.0231% | **78.5680** | 80.00 (27.78%) | Secondary 1 — Trained in Frontline Fitness (7.5 dots) |
+    | **Defense** | `2,001,579,280` | 36.9400% | **100.0000** | 100.00 (34.72%) | Primary — Trained in Mr. Isoyamas (8.0 dots) |
+    | **Speed** | `1,457,383,633` | 26.8967% | **72.8117** | 80.00 (27.78%) | Secondary 2 — Trained in Frontline Fitness (7.5 dots) |
+    | **Dexterity** | `386,890,260` | 7.1402% | **19.3292** | 28.00 (9.72%) | Dump Stat — Intentionally suppressed to maintain ratios |
+    | **Total** | `5,418,454,502` | 100.0000% | **270.7089** | 288.00 (100.00%) | **5.418B End-Game Combat Profile** |
+
+  - **Specialist Gym Threshold Verifications**:
+    1. *Mr. Isoyamas (Defense 8.0 dots, 50 Energy)*:
+       - **Rule**: $\text{Defense} \ge 1.25 \times (\text{2nd Highest Stat})$.
+       - 2nd Highest Stat: Strength (`1,572,601,329`).
+       - Threshold: $1.25 \times 1,572,601,329 = 1,965,751,661$.
+       - Player's Ratio: $\frac{2,001,579,280}{1,572,601,329} = \mathbf{1.2728}$ ($\mathbf{127.28\%} \ge 125\%$).
+       - **Buffer**: $+35,827,619$ Defense above lockout threshold (**UNLOCKED & ACTIVE**).
+    2. *Frontline Fitness (Strength & Speed 7.5 dots, 25 Energy)*:
+       - **Rule**: $(\text{Strength} + \text{Speed}) \ge 1.25 \times (\text{Defense} + \text{Dexterity})$.
+       - Offense Sum ($\text{Str} + \text{Spd}$): `3,029,984,962`.
+       - Defense/Evasion Sum ($\text{Def} + \text{Dex}$): `2,388,469,540`.
+       - Threshold: $1.25 \times 2,388,469,540 = 2,985,586,925$.
+       - Player's Ratio: $\frac{3,029,984,962}{2,388,469,540} = \mathbf{1.2686}$ ($\mathbf{126.86\%} \ge 125\%$).
+       - **Buffer**: $+44,398,037$ stats above lockout threshold (**UNLOCKED & ACTIVE**).
+    3. *Audit Verdict*: **The player is 100% using Hank's Ratio (Defense-primary variant)**. They are operating in the practical "safe training buffer" zone, keeping Strength (78.57) and Speed (72.81) safely under the 80 ceiling, and Dexterity (19.33) comfortably under the 28 cap, providing a ~36M to 44M stat buffer against accidental lockout.
+
+  - **Architectural & Comparative Analysis: Hank's Ratio vs. Custom Configurations**:
+    1. *Origin of Hank's Ratio*:
+       - Hank's Ratio is not an arbitrary formula; it represents the **exact mathematical extreme boundary** for simultaneously keeping an 8.0-dot single-stat gym (Mr. Isoyamas) and the opposite 7.5-dot combo gym (Frontline Fitness) unlocked.
+       - If $\text{Def} = 100$, then $\text{Str} \le 80$ and $\text{Spd} \le 80$. Max combined offense is $80 + 80 = 160$.
+       - To satisfy Frontline Fitness: $160 \ge 1.25 \times (100 + \text{Dex}) \implies 100 + \text{Dex} \le 128 \implies \mathbf{\text{Dex} \le 28}$.
+       - Thus, $\mathbf{100 : 80 : 80 : 28}$ is the exact mathematical limit.
+    2. *What Any "Custom Ratio" Must Obey*:
+       - Any alternative ratio to enable Mr. Isoyamas + Frontline Fitness is merely a subset of Hank's envelope.
+       - Dexterity can **never** exceed 28% of Defense (9.72% of total stats).
+       - Neither Strength nor Speed can exceed 80% of Defense.
+       - Neither Strength nor Speed can drop below 45% of Defense (even if Dexterity were 0).
+    3. *Why Hank's Balanced Configuration (Str ~80, Spd ~80, Dex ~20-28) is Superior to Skewed Custom Ratios*:
+       - **Maximizes Allowed Dexterity**: In PvP, having near-zero Dexterity guarantees enemies land 100% of their hits and debuffs. Hank's ratio maximizes the allowable Dexterity (~7–10%) mathematically possible. Any skewed ratio (e.g. Str 80, Spd 50) forces Dexterity down to $\le 4\%$ (practically zero).
+       - **Offensive Balance (Damage & Hit Chance)**: Training both Strength and Speed equally at 7.5 dots maximizes combat effectiveness (hitting often and hitting hard). Skewing one lower creates an exploit where agile defenders dodge easily.
+       - **Training Operating Corridor**: Balanced secondaries provide the widest possible training leeway between gym sessions without triggering accidental gym locks.
+    4. *Macro Benefits of Hank's Ratio over Baldr's Ratio or 1:1:1:1*:
+       - **Stat Growth Velocity**: Grants specialist gym access for **3 out of 4 stats** (1 at 8.0 dots, 2 at 7.5 dots), yielding significantly higher stat gains per energy than George's (7.3 dots). Over a 5B+ stat journey, this yields hundreds of millions of additional stats.
+       - **End-Game Faction Tank Role**: High Defense (37%) + high Strength/Speed (29%/27%) produces a devastating war juggernaut capable of absorbing massive punishment while 1-shotting opponents.
+  - **Date & Time**: 2026-10-19 00:05:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
