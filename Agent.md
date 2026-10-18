@@ -2431,3 +2431,60 @@ Extracted directly via Torn API stock market endpoints:
       - `node --check tornpda_war_enhanced.meta.js` (exit code 0)
   - **Date & Time**: 2026-10-17 22:25:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+#### Session 109
+- **Focus**: Comprehensive Architectural & UI/UX Integration Review of Torn Upstream Script (`Bounty Hunter` v1.21.1) for Application to Torn Combat & Radar Suite.
+  - **User Directive**:
+    - "review and learn from the design and ui ux integration into torn"
+  - **Context & Source Material**:
+    - Complete source audit of `bounty_hunter_upstream.user.js` (v1.21.1 by `lannav`, 3,896 lines).
+    - Cross-compared against our active scripts: `ff_scouter_bs_enhanced.user.js` (v3.06), `tornpda_war_enhanced.user.js` (v9.9), and `torn_mercenary_stakeout.user.js` (v1.05).
+  - **Core Architectural Paradigms & UI/UX Discoveries**:
+    1. *Shared Native Footer Docking (`setupEugFooterMenu`)*:
+       - **Native Alignment**: Rather than injecting arbitrary floating widgets that collide with Torn's responsive layout or chat bar, the script anchors directly into Torn's bottom navigation bar (`#notes_panel_button` / `#people_panel_button`).
+       - **Native Style Inheritance**: Copies native classes (`btn.className = refBtn.className`) and inherits Torn's SVG styling, matching Torn's button dimensions, gradients, hover states, and transitions seamlessly.
+       - **Multi-Script Aggregation**: If 1 script runs, it renders a solo icon button. If 2+ scripts run, it collapses into a single 3-dots `...` menu button (`data-eug="menu"`). Clicking it pops open an anchored row (`#eug-footer-row`) positioned with exact viewport coordinates (`centerX - rowRect.width / 2`, clamped to viewport margins).
+       - **Cross-Sandbox Bridge**: Communicates across isolated userscript sandboxes (`@grant none` vs `@grant GM_*`) by attaching a shared registry to `unsafeWindow.__eugeneScripts`.
+       - **SPA Route Transitions**: Uses an `rAF`-throttled `MutationObserver` on `document.body` that only re-renders if Torn's SPA swaps out the footer and the custom button is missing.
+       - **Clean Dismissal**: Automatically closes the menu on `Escape`, passive window `scroll`, `resize`, or clicking anywhere outside.
+    2. *Torn PDA (Mobile) vs Desktop Parity & Navigation*:
+       - **Key Auto-Resolution**: Inspects `const PDA_API_KEY = "###PDA-APIKEY###"`. If substituted by Torn PDA's injector, it auto-authenticates and disables manual input fields to prevent key corruption.
+       - **3-Tier Network Fallback**: Dynamically selects `PDA_httpGet` (Torn PDA native) -> `GM_xmlhttpRequest` (desktop CSP bypass) -> native `fetch`.
+       - **Safe WebView Navigation (`openTornUrl`)**: `window.open` frequently fails or is blocked in Torn PDA WebViews. The script dynamically creates `<a target="_blank">`, appends to DOM, triggers `.click()`, and removes it, allowing the native mobile shell to handle the navigation cleanly.
+       - **Touch Safety & Mis-Tap Prevention**: On desktop, clicking the toast card immediately triggers an attack. On touch devices (`matchMedia("(hover: none)").matches`), card clicking is disabled; users must tap the explicit `Attack →` button. This prevents accidental attacks when dragging or scrolling.
+       - **Responsive Mobile Layout**: On viewports $\le 768\text{px}$, `#bh-panel` becomes full-screen (`100vw`, `100vh`, `border-radius: 0`, `top: 0`, `left: 0`), transforming into a native mobile app view. Touch targets for close buttons are enforced at $\ge 44 \times 44\text{px}$ per Apple/Google guidelines.
+    3. *Collision-Free Distributed Rate Limiting & Cross-Tab Free-Riding*:
+       - **Per-Tab Ring Buffer (`bh_apiCalls_<TAB_ID>`)**: Each browser tab writes call timestamps exclusively to its own `localStorage` key. A reader aggregates all matching keys to compute the 60-second rolling rate. This completely avoids read-modify-write race conditions without complex locking protocols.
+       - **Dead Tab Cleanup**: Tabs inactive for $\ge 120\text{s}$ are purged automatically from storage.
+       - **Cross-Tab Free-Riding (`LS.shared`)**: The scan payload is broadcast via `localStorage.setItem(LS.shared, ...)`. Sibling tabs listen via `window.addEventListener("storage", ...)`. If a sibling tab refreshed within $80\%$ of the refresh window (`SHARED_FRESH_RATIO = 0.8`), the active tab adopts the cached payload, consuming **0 API calls**.
+       - **In-Flight Promise Deduplication**: Uses `_refreshing` promise locks to ensure concurrent user clicks and interval ticks never trigger parallel network requests.
+    4. *Lifecycle & Foreground Tab Coordination*:
+       - **Visibility Gating (`visibilitychange`)**: High-frequency watchlist polling is owned exclusively by the visible foreground tab.
+       - **Instant Handoff (`kickWatchIfVisible`)**: When a tab is focused, it immediately reads the latest targets from storage and kicks a 0ms poll, ensuring instant responsiveness without waiting for a stale timer.
+    5. *OPSEC & Password Manager Neutralization*:
+       - **Login Auto-Fill Protection**: Custom API key fields use `type="text"` rather than `type="password"`, paired with `data-lpignore="true"`, `data-1p-ignore="true"`, and `data-form-type="other"`. This stops 1Password, LastPass, Bitwarden, and browser password managers from erroneously prompting to save API keys or auto-filling login passwords into script fields.
+       - **CSS Masking**: Obscures characters via `-webkit-text-security: disc; text-security: disc; font-family: monospace; letter-spacing: 2px`.
+       - **Debug URL Sanitization**: The diagnostic ring buffer runs all logged URLs through `redactUrl(url)`, which replaces `key=...` and `apikey=...` parameters with `***`, preventing accidental credential leaks in user screenshots.
+    6. *Procedural Web Audio Engine & Autoplay Unlocking*:
+       - **100% In-Code Audio Synthesis**: Uses native `AudioContext` oscillators and gain envelopes to generate multi-frequency chimes, beeps, dings, and alert sirens directly in memory. Zero external audio assets, zero CORS failures, and zero CSP violations.
+       - **Autoplay Gesture Priming**: Registers one-time capture listeners on `pointerdown`, `touchstart`, and `keydown` across `document`. The very first user touch primes and unlocks the `AudioContext`, ensuring background alarms play without browser autoplay restrictions.
+       - **Anti-Click Enveloping**: Applies `exponentialRampToValueAtTime` (12ms attack, smooth decay) to prevent speaker pops.
+    7. *Toast Notification Architecture & Touch Physics*:
+       - **Dynamic Pruning (`pruneTo`)**: When a target is hospitalized, claimed, or falls outside criteria during a poll tick, their toast card is immediately removed from the screen, preventing wasted energy on invalid targets.
+       - **Hover-to-Pause Countdown**: Hovering pauses the auto-dismiss timer; leaving resumes with the exact remaining millisecond duration.
+       - **Touch Swipe Physics**: Uses PointerEvents with `setPointerCapture`, tracking `dx` with interactive opacity fade and a 80px flick threshold that throws the card off-screen. Captures and suppresses the subsequent click event to avoid accidental attacks.
+       - **Overflow Card Aggregation**: Caps visible toasts at `maxVisible` (default 3) and aggregates excess matches into a single `+N more` card that opens the full table.
+       - **Reversible Actions**: Blacklisting a target spawns an action toast with a 5-second `Undo` button.
+  - **Comparative Architecture & Upgrade Matrix for Our Script Suite**:
+    | Dimension | Bounty Hunter Upstream (`bounty_hunter_upstream.user.js`) | Our Current Implementation (`ff_scouter_bs`, `torn_mercenary_stakeout`, `tornpda_war`) | Technical Gap | Recommended Upgrade Action |
+    | :--- | :--- | :--- | :--- | :--- |
+    | **UI Docking** | Native footer icon (`#notes_panel_button`) with multi-script 3-dots aggregator row | Floating fixed-position viewport dock (`bottom: 20px; right: 20px`) | Floating dock can obscure native chat boxes or action buttons on smaller screens | Implement `setupEugFooterMenu` pattern to dock the Mercenary Stakeout Radar directly into Torn's bottom toolbar |
+    | **Mobile Navigation** | `openTornUrl()` synthesizes `<a target="_blank">` click | Direct `window.open()` in Stakeout Radar | `window.open()` can be blocked by mobile WebView popup blockers in Torn PDA | Replace `window.open()` with `openTornUrl()` for 100% reliable attack tab staging on both PC and Torn PDA |
+    | **Touch Safety** | Detects `matchMedia("(hover: none)")`; requires explicit button tap on mobile | Touch vs mouse not explicitly bifurcated on interactive cards | Risk of accidental mis-taps when scrolling on mobile devices | Add touch-mode guards to require explicit button taps on mobile touchscreens |
+    | **Cross-Tab Calls** | Per-tab `bh_apiCalls_<TAB_ID>` ring buffer + `LS.shared` free-riding ($0.8\times$) | Single-tab local counter; each tab polls independently | Multiple open tabs multiply Torn API call consumption | Adopt per-tab rolling keys and cross-tab payload sharing to keep multi-tab API consumption at $\approx 1\times$ |
+    | **Tab Visibility** | Foreground tab owns polling via `visibilitychange` + `kickWatchIfVisible` | Web Worker background ticker runs unconditionally | Background tabs might consume API quota when inactive | Retain Web Worker for urgent med-outs, but coordinate via storage events so only one tab polls |
+    | **Key OPSEC** | `type="text"`, CSS `text-security: disc`, `data-lpignore="true"` | Plain text prompt or standard masked label | Password managers may try to auto-fill or save API keys | Apply `.bh-input-masked` CSS and ignore attributes across all custom key configuration inputs |
+    | **Audio Alerts** | Procedural Web Audio (`AudioContext`) with 4 distinct tone patterns | Single synthesized chirp in Stakeout Radar | Current tone is basic; lacks configurable sounds | Expand procedural sound library (chime, beep, ding, alert) with envelope smoothing |
+    | **Toast Lifecycle** | Real-time `pruneTo` removes toasts for invalid targets; hover-to-pause; swipe physics | Simple self-dismissing floating HUD | Toasts may stay visible after target is already hospitalized | Add `pruneTo` target reconciliation and hover-to-pause timers to Radar alerts |
+  - **Date & Time**: 2026-10-18 20:44:17 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
