@@ -2585,3 +2585,58 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-18 22:42:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 112
+- **Focus**: Implementation of Strict 2-Condition Attack Alarm Enforcement (Okay & Ready + Online or Last Action $\le 5$ Minutes), Active Status UI Indicators, and Elimination of Inactive Target Alarms in `torn_mercenary_stakeout.user.js` (`v1.08`).
+  - **User Directive**:
+    - "also, the target needs to meet 2 conditions for the alarm to trigger, not only do they have to be okay and ready but also online or last action within 5 mins."
+  - **Requirement & Architectural Analysis**:
+    1. *The 2-Condition Combat Rule*:
+       - In mercenary and bounty hunting, alarming for offline players who naturally tick out of hospital while asleep wastes player attention and creates false urgency.
+       - Conversely, alarming when a hospitalized target opens Torn on their phone while still having 3 hours of hospital time causes the player to rush to attack an unattackable target.
+       - Therefore, the radar's attack alarms must require **BOTH** conditions simultaneously:
+         1. **Condition 1 (Ready)**: Target is in state `'Okay'` (`snapshot.state === 'Okay'`).
+         2. **Condition 2 (Active)**: Target is `'Online'` OR their `last_action` timestamp was within the last 5 minutes ($\le 300\text{ seconds}$).
+    2. *Telemetry & Timestamp Parsing*:
+       - Extracted exact unix seconds via `parseInt(freshData.last_action?.timestamp || '0', 10)`.
+       - Implemented multi-tier activity validation:
+         - Tier 1: `snapshot.online === 'Online'`.
+         - Tier 2: `nowSec - snapshot.lastActionTs <= 300` (within 5 minutes).
+         - Tier 3: Relative string regex fallback (`"Just now"`, `"1 minute ago"`, `"2 minutes ago"`, etc.) if timestamp is unavailable.
+  - **Code Implementations (`v1.08`)**:
+    1. *Unified Activity & Readiness Predicates*:
+       - Built helper functions:
+         - [`isTargetActiveWithin5Min(snapshot, nowSec)`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/torn_mercenary_stakeout.user.js#L782-L806)
+         - [`isTargetAttackReady(snapshot)`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/torn_mercenary_stakeout.user.js#L808-L811)
+         - [`isTargetReadyAndActive(snapshot, nowSec)`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/torn_mercenary_stakeout.user.js#L813-L817)
+         - [`isTargetNearHospAndActive(snapshot, nowSec, thresholdMin)`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/torn_mercenary_stakeout.user.js#L819-L827)
+    2. *Transition Engine Redesign in `evaluateTargetTriggers`*:
+       - Replaced fragmented, mutually conflicting alarms with:
+         `const becameReadyAndActive = !wasReadyAndActive && isNowReadyAndActive;`
+       - Correctly triggers the attack alarm when:
+         - A hospitalized target discharges / meds out while active.
+         - An already-Okay target transitions from inactive $\to$ active (opens Torn / clicks).
+         - A traveling target lands while active.
+       - Guarantees zero alarms when:
+         - An inactive target leaves hospital while offline.
+         - A hospitalized target goes online while still in hospital.
+    3. *Active-Filtered Hospital Staging Alert*:
+       - When `alertOnNearHosp` is enabled, the $\le 5$-minute pre-staging alarm only fires if the target is **also active** within 5 minutes (`isTargetNearHospAndActive`), ensuring players are not alerted to stage attacks on inactive targets.
+    4. *Settings Panel Integration*:
+       - Added `requireActive: true` to `DEFAULT_CONFIG`.
+       - Added `⚡ Require Target Active (≤ 5 Mins)` checkbox in the settings panel with live toggle persistence.
+    5. *Target Card Visual Hierarchy*:
+       - Active & Ready: pulsating vibrant green border, `⚡ OKAY & ACTIVE!` badge, and `⚡ (READY & ACTIVE!)` button.
+       - Near-Hosp & Active: glowing amber border, `⚠️ STAGE! Hosp: Xm` badge, and `⚠️ (STAGE ~Xm)` button.
+       - Okay but Inactive: muted slate border, `💤 Okay (Offline)` badge, and `(Inactive)` button label.
+  - **Files Updated**:
+    - `torn_mercenary_stakeout.user.js` (bumped to **v1.08**)
+    - `torn_mercenary_stakeout.meta.js` (bumped to **v1.08**)
+    - `Agent.md` (documented Session 112)
+  - **Verification**:
+    - `node --check torn_mercenary_stakeout.user.js` (exit code 0).
+    - `node --check torn_mercenary_stakeout.meta.js` (exit code 0).
+    - Verified Torn API `last_action` payload structure on live API endpoint.
+  - **Date & Time**: 2026-10-18 22:51:30 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
