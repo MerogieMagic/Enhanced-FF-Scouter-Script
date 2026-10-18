@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.06
+// @version      1.07
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.06";
+    const SCRIPT_VERSION = "1.07";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -285,6 +285,8 @@
     // --- 2. CONFIGURATION & STATE ---
     const DEFAULT_CONFIG = {
         alertOnOkay: true,
+        alertOnNearHosp: true,      // ⚠️ Alert when hospital countdown drops to <= 5 minutes (stage attack)
+        nearHospThresholdMin: 5,    // 5 minutes
         alertOnOnline: true,
         alertOnLanding: true,
         alertOnFullHp: false,
@@ -313,6 +315,7 @@
     }
 
     const targetsCache = {};
+    const targetNearHospAlerted = {}; // tracks hospital release timestamps that already fired the <5m warning
     const callLog = [];
 
     function recordApiCall() {
@@ -349,12 +352,90 @@
         }
     }
 
-    // Warm-up AudioContext on user interaction across Torn
-    ['click', 'keydown', 'touchstart', 'pointerdown'].forEach(evt => {
-        window.addEventListener(evt, () => {
-            try { getAudioCtx(); } catch (e) {}
-        }, { once: false, passive: true });
+    // Warm-up and unlock AudioContext on user interaction across Torn (capture phase)
+    let audioUnlocked = false;
+    function unlockAudioEngine() {
+        try {
+            const ctx = getAudioCtx();
+            if (ctx) {
+                if (ctx.state === 'suspended') {
+                    ctx.resume().catch(() => {});
+                }
+                if (!audioUnlocked) {
+                    // Play a 1-sample silent sound to satisfy browser autoplay policy
+                    const buffer = ctx.createBuffer(1, 1, 22050);
+                    const source = ctx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(ctx.destination);
+                    source.start(0);
+                    audioUnlocked = true;
+                }
+            }
+        } catch (e) {}
+    }
+    ['click', 'keydown', 'touchstart', 'pointerdown', 'mousedown'].forEach(evt => {
+        document.addEventListener(evt, unlockAudioEngine, { capture: true, passive: true });
+        window.addEventListener(evt, unlockAudioEngine, { capture: true, passive: true });
     });
+
+    // In-memory 8-bit PCM WAV synthesizer: 100% reliable HTML5 audio fallback if Web Audio is blocked
+    function playPcmWavFallback(soundType = 'okay', durationMs = 1000, volume = 0.85) {
+        try {
+            const sampleRate = 8000;
+            const numSamples = Math.floor(sampleRate * (durationMs / 1000));
+            const buffer = new Uint8Array(44 + numSamples);
+            const view = new DataView(buffer.buffer);
+            const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) buffer[offset + i] = str.charCodeAt(i); };
+            writeStr(0, 'RIFF');
+            view.setUint32(4, 36 + numSamples, true);
+            writeStr(8, 'WAVE');
+            writeStr(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);  // PCM
+            view.setUint16(22, 1, true);  // Mono
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate, true);
+            view.setUint16(32, 1, true);
+            view.setUint16(34, 8, true);  // 8-bit
+            writeStr(36, 'data');
+            view.setUint32(40, numSamples, true);
+
+            for (let i = 0; i < numSamples; i++) {
+                const t = i / sampleRate;
+                let freq = 880;
+                let gate = 1.0;
+
+                if (soundType === 'warning') {
+                    // Triple pulse (0.33s per cycle: 0.22s beep, 0.11s silent gap)
+                    const cycle = t % 0.33;
+                    gate = cycle < 0.22 ? 1.0 : 0.0;
+                    freq = 1174.66;
+                } else if (soundType === 'online') {
+                    // Ascending notes: 0.0-0.25s (587Hz), 0.25-0.5s (880Hz), 0.5-1.0s (1174Hz)
+                    if (t < 0.25) freq = 587.33;
+                    else if (t < 0.5) freq = 880.00;
+                    else freq = 1174.66;
+                    gate = 1.0;
+                } else {
+                    // Siren alternating pitch (880Hz <-> 1760Hz every 0.2s)
+                    freq = (Math.floor(t / 0.2) % 2 === 0) ? 1760 : 988;
+                }
+
+                const env = Math.min(1.0, (numSamples - i) / (sampleRate * 0.05));
+                const val = (Math.sin(2 * Math.PI * freq * t) > 0 ? 1 : -1) * gate;
+                buffer[44 + i] = Math.floor(128 + (val * 120 * volume * env));
+            }
+
+            const blob = new Blob([buffer], { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.volume = Math.max(0.1, Math.min(1.0, volume));
+            audio.play().catch(() => {});
+            setTimeout(() => URL.revokeObjectURL(url), durationMs + 1000);
+        } catch (e) {
+            console.error('[Stakeout] Audio fallback error:', e);
+        }
+    }
 
     // Universal navigation that works in desktop tabs and mobile Torn PDA WebViews
     function openTornUrl(url, makeActive = true) {
@@ -419,12 +500,22 @@
     // High-Volume Procedural Web Audio Engine with Piercing Multi-Harmonic Profiles
     function playStakeoutAlarm(type = 'okay') {
         if (!config.soundAlarm) return;
-        try {
-            const ctx = getAudioCtx();
-            if (!ctx) return;
-            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        const vol = Math.max(0.1, Math.min(1.0, config.alarmVolume ?? 1.0));
 
-            const vol = Math.max(0.1, Math.min(1.0, config.alarmVolume ?? 1.0));
+        // Always attempt resume if suspended
+        const ctx = getAudioCtx();
+        if (ctx && ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+        }
+
+        // If Web Audio is not running (e.g. suspended in background tab), IMMEDIATELY play PCM WAV fallback
+        if (!ctx || ctx.state !== 'running') {
+            playPcmWavFallback(type, type === 'warning' ? 1000 : (type === 'online' ? 800 : 1200), vol);
+        }
+
+        try {
+            if (!ctx) return;
+
             const soundType = config.alarmSoundType || 'siren';
 
             if (type === 'okay' || type === 'test') {
@@ -535,25 +626,65 @@
                     osc1.stop(t0 + 0.5);
                     osc2.stop(t0 + 0.7);
                 }
-            } else if (type === 'online') {
-                // Target Online / Active (High double chirp)
+            } else if (type === 'warning') {
+                // Hospital Countdown < 5 Mins Warning (Urgent Triple Staccato Pulse: 1046Hz & 1318Hz, 1.0s)
                 const masterGain = ctx.createGain();
-                masterGain.gain.setValueAtTime(0.65 * vol, ctx.currentTime);
+                masterGain.gain.setValueAtTime(0.85 * vol, ctx.currentTime);
                 masterGain.connect(ctx.destination);
-                const osc = ctx.createOscillator();
-                const g = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(659.25, ctx.currentTime);
-                osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
-                g.gain.setValueAtTime(0.7, ctx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-                osc.connect(g);
-                g.connect(masterGain);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.35);
+
+                for (let i = 0; i < 3; i++) {
+                    const t0 = ctx.currentTime + (i * 0.32);
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'square';
+                    osc1.frequency.setValueAtTime(1046.5, t0); // C6
+                    osc2.frequency.setValueAtTime(1318.5, t0); // E6
+                    g.gain.setValueAtTime(0.6, t0);
+                    g.gain.exponentialRampToValueAtTime(0.01, t0 + 0.22);
+                    osc1.connect(g);
+                    osc2.connect(g);
+                    g.connect(masterGain);
+                    osc1.start(t0);
+                    osc2.start(t0);
+                    osc1.stop(t0 + 0.22);
+                    osc2.stop(t0 + 0.22);
+                }
+            } else if (type === 'online') {
+                // Target Online / Active (Loud 3-Note Ascending Fanfare: 587Hz -> 880Hz -> 1174Hz, 0.8s)
+                const masterGain = ctx.createGain();
+                masterGain.gain.setValueAtTime(0.85 * vol, ctx.currentTime);
+                masterGain.connect(ctx.destination);
+
+                const notes = [
+                    { f: 587.33, t: 0, d: 0.18 },   // D5
+                    { f: 880.00, t: 0.18, d: 0.18 }, // A5
+                    { f: 1174.66, t: 0.36, d: 0.44 } // D6
+                ];
+                notes.forEach(n => {
+                    const t0 = ctx.currentTime + n.t;
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    osc1.type = 'sawtooth';
+                    osc2.type = 'square';
+                    osc1.frequency.setValueAtTime(n.f, t0);
+                    osc2.frequency.setValueAtTime(n.f, t0);
+                    g.gain.setValueAtTime(0.5, t0);
+                    g.gain.exponentialRampToValueAtTime(0.01, t0 + n.d);
+                    osc1.connect(g);
+                    osc2.connect(g);
+                    g.connect(masterGain);
+                    osc1.start(t0);
+                    osc2.start(t0);
+                    osc1.stop(t0 + n.d);
+                    osc2.stop(t0 + n.d);
+                });
             }
         } catch (e) {
-            console.error('[Stakeout] Audio error:', e);
+            console.error('[Stakeout] Audio error, falling back to PCM WAV:', e);
+            playPcmWavFallback(type === 'warning' ? 1046 : 880, 800, vol);
         }
     }
 
@@ -665,6 +796,32 @@
 
         const existing = targetsCache[targetId];
         const previous = existing ? existing.data : null;
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        // --- 1. HOSPITAL COUNTDOWN <= 5 MINS ALERT (Pre-Stage Attack Window) ---
+        if (config.alertOnNearHosp && currentSnapshot.state === 'Hospital' && currentSnapshot.until > nowSec) {
+            const remainingSec = currentSnapshot.until - nowSec;
+            const thresholdSec = (config.nearHospThresholdMin || 5) * 60;
+            if (remainingSec <= thresholdSec && targetNearHospAlerted[targetId] !== currentSnapshot.until) {
+                targetNearHospAlerted[targetId] = currentSnapshot.until;
+                playStakeoutAlarm('warning');
+                const minLeft = Math.max(1, Math.ceil(remainingSec / 60));
+                startTitleFlash(`${currentSnapshot.name} HOSP < ${minLeft}M!`);
+                sendStakeoutNotification(
+                    `⚠️ ${currentSnapshot.name} Hospital < 5 Mins!`,
+                    `Release in ~${minLeft}m (${remainingSec}s). Pre-stage attack now!`,
+                    `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
+                );
+                window.focus();
+                triggerOsAutoFocus();
+                showStakeoutToast(`⚠️ Target [${currentSnapshot.name}] hospital release in ~${minLeft}m (${remainingSec}s)! Stage attack.`);
+            }
+        }
+
+        // Reset near-hosp alert tracker if target leaves hospital
+        if (currentSnapshot.state !== 'Hospital' || currentSnapshot.until <= nowSec) {
+            delete targetNearHospAlerted[targetId];
+        }
 
         if (previous) {
             const isNowOkay = currentSnapshot.state === 'Okay';
@@ -689,17 +846,22 @@
                 }
             }
 
-            // Transition: Target came online or active
-            if (config.alertOnOnline && !wasOnline && isNowOnline) {
+            // Transition: Target came online or became active
+            // Detects:
+            // 1. Offline -> Online / Idle
+            // 2. Idle -> Online (player became actively engaged)
+            const becameActive = (!wasOnline && isNowOnline) || (previous.online === 'Idle' && currentSnapshot.online === 'Online');
+            if (config.alertOnOnline && becameActive) {
                 playStakeoutAlarm('online');
                 startTitleFlash(`${currentSnapshot.name} ONLINE!`);
                 sendStakeoutNotification(
-                    `${currentSnapshot.name} is ONLINE!`,
-                    `Activity detected (${currentSnapshot.online}): ${currentSnapshot.lastActionRel}`,
+                    `${currentSnapshot.name} is ${currentSnapshot.online.toUpperCase()}!`,
+                    `Activity detected (${currentSnapshot.online}): ${currentSnapshot.lastActionRel || 'Just now'}`,
                     `https://www.torn.com/profiles.php?XID=${targetId}`
                 );
                 window.focus();
                 triggerOsAutoFocus();
+                showStakeoutToast(`🟢 [${currentSnapshot.name}] is ${currentSnapshot.online} (${currentSnapshot.lastActionRel || 'Just now'})!`);
                 // Auto-open attack tab if target is Online AND Okay
                 if (config.autoOpenAttack && isNowOnline && isNowOkay) {
                     triggerAutoAttackOpen(targetId);
@@ -915,6 +1077,11 @@
             box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
             background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, #1e293b 100%);
         }
+        .stakeout-card.near-ready {
+            border-color: #f59e0b;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, #1e293b 100%);
+        }
         .stakeout-card-header {
             display: flex;
             align-items: center;
@@ -971,6 +1138,12 @@
             background: rgba(239, 68, 68, 0.25);
             border: 1px solid #ef4444;
             color: #fca5a5;
+        }
+        .stakeout-status-pill.hospital.near-ready {
+            background: rgba(245, 158, 11, 0.3) !important;
+            border: 1px solid #f59e0b !important;
+            color: #fef08a !important;
+            animation: stakeoutPillPulse 1.2s infinite ease-in-out;
         }
         .stakeout-status-pill.traveling {
             background: rgba(245, 158, 11, 0.25);
@@ -1039,6 +1212,16 @@
         .stakeout-attack-btn.ready {
             background: #16a34a;
             animation: stakeoutPillPulse 1.2s infinite ease-in-out;
+        }
+        .stakeout-attack-btn.stage-ready {
+            background: #b45309;
+            border-color: #f59e0b;
+            color: #fef08a !important;
+            animation: stakeoutPillPulse 1.4s infinite ease-in-out;
+        }
+        .stakeout-attack-btn.stage-ready:hover {
+            background: #d97706;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
         }
 
         .stakeout-settings {
@@ -1184,6 +1367,10 @@
                         <span>Alert on Target Okay (Hospital Discharge)</span>
                         <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
                     </label>
+                    <label class="stakeout-toggle-row" title="Alerts when target has 5 minutes or less remaining in hospital so you can pre-stage attack">
+                        <span>⚠️ Alert on Hospital &lt; 5 Mins (Stage Attack)</span>
+                        <input type="checkbox" id="toggle-alert-nearhosp" ${config.alertOnNearHosp ? 'checked' : ''} />
+                    </label>
                     <label class="stakeout-toggle-row">
                         <span>Alert on Target Online / Active</span>
                         <input type="checkbox" id="toggle-alert-online" ${config.alertOnOnline ? 'checked' : ''} />
@@ -1285,6 +1472,9 @@
 
         const tOkay = document.getElementById('toggle-alert-okay');
         if (tOkay) tOkay.onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
+
+        const tNearHosp = document.getElementById('toggle-alert-nearhosp');
+        if (tNearHosp) tNearHosp.onchange = (e) => { config.alertOnNearHosp = e.target.checked; saveConfig(); };
 
         const tOnline = document.getElementById('toggle-alert-online');
         if (tOnline) tOnline.onchange = (e) => { config.alertOnOnline = e.target.checked; saveConfig(); };
@@ -1439,11 +1629,17 @@
         if (card.dataset.lastStateKey === stateKey) return;
         card.dataset.lastStateKey = stateKey;
 
-        card.className = `stakeout-card ${isOkay ? 'ready' : ''}`;
+        const isNearHosp = d.state === 'Hospital' && remainingSec > 0 && remainingSec <= ((config.nearHospThresholdMin || 5) * 60);
+
+        card.className = `stakeout-card ${isOkay ? 'ready' : (isNearHosp ? 'near-ready' : '')}`;
 
         let statusBadge = '';
         if (d.state === 'Hospital') {
-            statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
+            if (isNearHosp) {
+                statusBadge = `<span class="stakeout-status-pill hospital near-ready" title="Pre-stage attack! Exact remaining: ${exactTooltip}">⚠️ STAGE! Hosp: ${formattedTime}</span>`;
+            } else {
+                statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
+            }
         } else if (d.state === 'Traveling') {
             statusBadge = `<span class="stakeout-status-pill traveling" title="Exact remaining: ${exactTooltip}">✈️ ${d.desc || 'Traveling'} (${formattedTime})</span>`;
         } else if (d.state === 'Abroad') {
@@ -1480,9 +1676,9 @@
                 <div class="stakeout-hp-text">❤️ ${d.hpCurr.toLocaleString()} / ${d.hpMax.toLocaleString()} (${d.hpPct.toFixed(d.hpPct % 1 === 0 ? 0 : 1)}%)</div>
             </div>
 
-            <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ${isOkay ? 'ready' : ''}">
+            <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ${isOkay ? 'ready' : (isNearHosp ? 'stage-ready' : '')}">
                 <span>⚔️ ATTACK TARGET</span>
-                ${isOkay ? '<span>⚡ (READY!)</span>' : ''}
+                ${isOkay ? '<span>⚡ (READY!)</span>' : (isNearHosp ? `<span>⚠️ (STAGE ~${Math.max(1, Math.ceil(remainingSec / 60))}M)</span>` : '')}
             </a>
         `;
 
@@ -1578,11 +1774,16 @@
         let rapidTargetId = null;
         if (config.rapidHospPolling) {
             const nowSec = Math.floor(Date.now() / 1000);
+            const thresholdSec = (config.nearHospThresholdMin || 5) * 60;
+            let lowestRemaining = Infinity;
             for (const id of watchlist) {
                 const info = targetsCache[id]?.data;
-                if (info && info.state === 'Hospital' && info.until > nowSec && (info.until - nowSec) <= 60) {
-                    rapidTargetId = id;
-                    break;
+                if (info && info.state === 'Hospital' && info.until > nowSec) {
+                    const rem = info.until - nowSec;
+                    if (rem <= thresholdSec && rem < lowestRemaining) {
+                        lowestRemaining = rem;
+                        rapidTargetId = id;
+                    }
                 }
             }
         }

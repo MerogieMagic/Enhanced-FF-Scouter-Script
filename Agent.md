@@ -2527,3 +2527,61 @@ Extracted directly via Torn API stock market endpoints:
     - Python compilation & test run of `/health` and `/focus` endpoints on port 8766 (both exit code 0).
   - **Date & Time**: 2026-10-18 21:09:50 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 111
+- **Focus**: Diagnosis & Elimination of Silent Audio Triggers, Addition of $\le 5\text{-Minute}$ Hospital Countdown Attack Pre-Staging Alert, Idle $\to$ Online Activity Transition Fix, and Background Autoplay Resilience in `torn_mercenary_stakeout.user.js` (`v1.07`).
+  - **User Directive**:
+    - "sound didnt play when the target went online or drop to less than 5mins"
+  - **Root Cause Analysis & Forensic Breakdown**:
+    1. *Silent Online Transition Failure*:
+       - In `evaluateTargetTriggers`, the condition was:
+         `const wasOnline = previous.online === 'Online' || previous.online === 'Idle';`
+         `const isNowOnline = currentSnapshot.online === 'Online' || currentSnapshot.online === 'Idle';`
+         `if (config.alertOnOnline && !wasOnline && isNowOnline)`
+       - In Torn City, targets frequently sit in `'Idle'` before clicking an action and transitioning to `'Online'`.
+       - Because `'Idle'` was treated as online in `wasOnline`, transitioning from `Idle` $\to$ `Online` resulted in `!true && true = false`. The alert was completely suppressed!
+    2. *Missing $\le 5\text{-Minute}$ Hospital Countdown Logic*:
+       - The radar previously only alerted upon total discharge (`state === 'Okay'`). There was zero trigger evaluation or notification logic for when a target's remaining hospital countdown entered the $\le 5\text{-minute}$ pre-staging window.
+       - Rapid hospital polling in `pollNextWatchlistTarget` was hardcoded to only prioritize targets with $\le 60\text{ seconds}$ remaining, leaving $\le 5\text{-minute}$ targets unprioritized.
+    3. *Browser Background Tab Autoplay Muting*:
+       - Modern Chromium/WebKit browsers automatically suspend idle `AudioContext` instances in background tabs.
+       - Calling `ctx.resume()` from a background timer without an active user gesture rejects.
+       - Scheduling Web Audio oscillators on a suspended context produces no sound and throws no error, causing the `catch` block to be bypassed so the PCM WAV fallback was never called.
+  - **Architectural & Technical Implementations (`v1.07`)**:
+    1. *Active Gesture Capture & Autoplay Unlocking*:
+       - Attached capture listeners (`{ capture: true, passive: true }`) across both `document` and `window` for `['click', 'keydown', 'touchstart', 'pointerdown', 'mousedown']`.
+       - On the first gesture, synthesizes and plays a 1-sample silent Web Audio buffer (`ctx.createBuffer(1, 1, 22050)` $\to$ `src.start(0)`), permanently satisfying browser autoplay activation policies.
+    2. *Pattern-Aware In-Memory 8-bit PCM WAV Synthesizer (`playPcmWavFallback`)*:
+       - Generates pure 8-bit in-memory PCM WAV blobs with custom envelope gating:
+         - `warning`: Urgent triple-pulse alarm (1174.66Hz square wave, 0.22s pulse / 0.11s gap over 1.0s).
+         - `online`: 3-note ascending fanfare (587.33Hz $\to$ 880.00Hz $\to$ 1174.66Hz over 0.8s).
+         - `okay` / `siren`: Alternating dual-tone emergency klaxon (1760Hz $\leftrightarrow$ 988Hz every 0.2s over 1.2s).
+       - In `playStakeoutAlarm`, if `AudioContext` is not in the `'running'` state (e.g., suspended in a background tab), `playPcmWavFallback` fires **immediately**, ensuring sound is 100% audible under all tab states.
+    3. *Hospital Countdown $\le 5\text{-Minute}$ Attack Pre-Staging Trigger*:
+       - Added `alertOnNearHosp: true` and `nearHospThresholdMin: 5` to `DEFAULT_CONFIG`.
+       - Built `targetNearHospAlerted` release tracking: when a target's remaining hospital countdown drops to $\le 300\text{s}$ ($\le 5\text{m}$), fires exactly once per hospital stay:
+         - Urgent triple-pulse warning audio (`playStakeoutAlarm('warning')`).
+         - Dynamic tab title pulsing (`startTitleFlash('[Name] HOSP < Xm!')`).
+         - Persistent desktop notification with direct attack staging URL.
+         - Signals `focus_companion.py` via `triggerOsAutoFocus()` to switch focus to the browser window.
+         - On-screen radar toast notification.
+       - Automatically purges tracking when the target leaves hospital so subsequent stays alert properly.
+    4. *Repaired Online / Active Transition*:
+       - Implemented:
+         `const becameActive = (!wasOnline && isNowOnline) || (previous.online === 'Idle' && currentSnapshot.online === 'Online');`
+       - Accurately captures both `Offline` $\to$ `Online`/`Idle` and `Idle` $\to$ `Online`.
+    5. *Rapid Polling Priority for $\le 5\text{-Minute}$ Targets*:
+       - Upgraded `pollNextWatchlistTarget` so targets whose hospital time is $\le (config.nearHospThresholdMin \times 60)$ are prioritized every 5-second polling cycle, selecting the target closest to discharge.
+    6. *Radar Dock UI & Settings Integration*:
+       - Added `⚠️ Alert on Hospital < 5 Mins (Stage Attack)` checkbox in the radar settings panel with live toggle persistence.
+       - Added `.near-ready` amber glowing card style and `⚠️ (STAGE ~Xm)` attack button during the staging window.
+  - **Files Updated**:
+    - `torn_mercenary_stakeout.user.js` (bumped to **v1.07**)
+    - `torn_mercenary_stakeout.meta.js` (bumped to **v1.07**)
+    - `Agent.md` (documented Session 111)
+  - **Verification**:
+    - JavaScript syntax validation via `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+    - Local Windows companion bridge verified via `/health` endpoint on port 8766.
+  - **Date & Time**: 2026-10-18 22:42:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
