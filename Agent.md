@@ -2488,3 +2488,42 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-18 20:44:17 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+
+#### Session 110
+- **Focus**: High-Volume Procedural Audio Engine, Persistent Desktop Notifications, Tab Title Pulsing, and Automated Windows OS Focus Companion Bridge in `torn_mercenary_stakeout.user.js` (`v1.06`) & `focus_companion.py`.
+  - **User Directive**:
+    - "can we enhance the mercenary stakeout radar, i want a louder sound and to alt tab to the browser if not the current viewed application"
+  - **Architectural & Technical Analysis**:
+    1. *Audio Loudness & Acoustic Penetration*:
+       - **Root Cause of Weak Audio**: Previously, `playStakeoutAlarm` relied on single/dual `sine` and `triangle` oscillators with low gain (`0.2` - `0.35`) and short duration (`0.55s`). Pure sine waves lack upper-order harmonic overtones, making them easily masked by game audio, background music, or speech.
+       - **High-Gain Multi-Harmonic Sound Profiles**: Redesigned procedural synthesizer using stacked `sawtooth` (rich harmonic frequency spectrum) + `square` (punchy upper bite) oscillators, peaking at $0.85\times$ volume with extended 1.2s - 1.5s playback:
+         1. `siren` (Emergency Dual-Tone Klaxon - Loudest, default): 3 rapid alternating cycles between 880Hz and 1760Hz.
+         2. `horn` (Tactical Air Horn): Heavy two-blast triad chord (440Hz, 554.37Hz, 659.25Hz) mimicking a naval warning horn.
+         3. `klaxon` (Heavy War Pulse): Dual rising/falling pitch sweeps (587Hz -> 1174Hz -> 587Hz).
+         4. `chime` (Bright High Chime): Clear dual crystalline chime (1046Hz -> 1568Hz) at 0.8 gain.
+         5. `online` (Active Chirp): High rising double chirp (659Hz -> 880Hz).
+       - **Radar Settings Audio Controls**: Added volume slider (`10%` to `100%`) with live percentage display, sound profile dropdown selector, and interactive `🔊 Test Sound` button in Radar Settings.
+       - **Autoplay Gesture Priming**: Installed global capture listeners on `pointerdown`, `touchstart`, `keydown`, `click` to prime and unpause the `AudioContext` on the very first user interaction, ensuring background tabs are never muted by browser autoplay restrictions.
+    2. *Windows OS & Browser Window Focus Architecture ("Alt-Tab" Mechanics)*:
+       - **OS Security Constraint**: Microsoft Windows strictly enforces `LockSetForegroundWindow` to prevent background programs from stealing focus from the active foreground window. When a background web tab calls `window.focus()`, Windows intentionally flashes the browser's taskbar icon bright orange rather than forcing an application switch.
+       - **Multi-Tier Focus & Alert Architecture**:
+         1. *Persistent Windows Desktop Notification*: Upgraded `sendStakeoutNotification` with `{ requireInteraction: true, silent: true }`. In Windows 10/11, this renders an Action Center toast banner in the bottom-right corner **on top of any running application or game**. Clicking the banner immediately brings the browser to the front (`window.focus()`) and opens the attack tab via `openTornUrl`.
+         2. *Dynamic Tab Title Pulsing*: Implemented `startTitleFlash(text)` which alternates `document.title` between `🚨 [TARGET OKAY - ATTACK!]` and `⚔️ [READY - STAKEOUT RADAR]` every 600ms. Automatically disengages when the window is focused or after 30 seconds.
+         3. *Universal Navigation Engine (`openTornUrl`)*: Uses `GM_openInTab(url, { active: true, insert: true, setParent: true })` with fallback to synthesized `<a target="_blank">` click, ensuring reliable attack tab staging across desktop browsers and Torn PDA WebViews.
+         4. *Dedicated Windows OS Auto-Focus Companion (`focus_companion.py`)*:
+            - For users who want 100% automated OS-level window switching (true Alt-Tab without having to click the notification banner):
+            - Built a zero-dependency local HTTP bridge in Python (`focus_companion.py`) listening on `http://127.0.0.1:8766`.
+            - When an attackable target transition occurs, the radar sends a background request to `http://127.0.0.1:8766/focus`.
+            - The companion locates the Torn browser window via Win32 `EnumWindows`, restores it if minimized (`ShowWindow(SW_RESTORE)`), simulates an Alt-key tap (`user32.keybd_event(0x12, ...)`) to acquire foreground activation rights, and brings the browser window to the absolute front via `SetForegroundWindow` and `SwitchToThisWindow`!
+            - Created double-clickable `start_focus_companion.bat` for instant 1-click startup.
+            - Handled Windows console character encoding (UTF-8) to ensure compatibility across all terminal code pages.
+  - **Files Updated & Created**:
+    - `torn_mercenary_stakeout.user.js` (bumped to **v1.06**)
+    - `torn_mercenary_stakeout.meta.js` (bumped to **v1.06**)
+    - `focus_companion.py` (new local Windows OS window-raising bridge)
+    - `start_focus_companion.bat` (1-click batch launcher)
+  - **Verification**:
+    - Syntax verification via `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+    - Python compilation & test run of `/health` and `/focus` endpoints on port 8766 (both exit code 0).
+  - **Date & Time**: 2026-10-18 21:09:50 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.05
+// @version      1.06
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -10,6 +10,8 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
+// @grant        GM_openInTab
+// @grant        GM_notification
 // @connect      raw.githubusercontent.com
 // @downloadURL  https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js
 // @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js
@@ -23,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.05";
+    const SCRIPT_VERSION = "1.06";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -287,8 +289,11 @@
         alertOnLanding: true,
         alertOnFullHp: false,
         soundAlarm: true,
+        alarmVolume: 1.0,           // 0.1 to 1.0 (10% to 100%)
+        alarmSoundType: 'siren',    // 'siren' (loudest) | 'horn' | 'klaxon' | 'chime'
         desktopNotif: true,
         autoOpenAttack: false,
+        osAutoFocus: true,          // pings local focus companion on 127.0.0.1:8766
         rapidHospPolling: true,
         pollingInterval: 5, // seconds
         isPaused: false,
@@ -345,12 +350,73 @@
     }
 
     // Warm-up AudioContext on user interaction across Torn
-    ['click', 'keydown', 'touchstart'].forEach(evt => {
+    ['click', 'keydown', 'touchstart', 'pointerdown'].forEach(evt => {
         window.addEventListener(evt, () => {
             try { getAudioCtx(); } catch (e) {}
         }, { once: false, passive: true });
     });
 
+    // Universal navigation that works in desktop tabs and mobile Torn PDA WebViews
+    function openTornUrl(url, makeActive = true) {
+        try {
+            if (typeof GM_openInTab === 'function') {
+                GM_openInTab(url, { active: makeActive, insert: true, setParent: true });
+                return;
+            }
+        } catch (e) {}
+        try {
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            return;
+        } catch (e) {}
+        try {
+            window.open(url, '_blank');
+        } catch (e) {}
+    }
+
+    // Dynamic browser tab title pulsing to attract attention on taskbar
+    let titleFlashTimer = null;
+    let originalPageTitle = null;
+    function startTitleFlash(text = 'TARGET OKAY - ATTACK!') {
+        stopTitleFlash();
+        originalPageTitle = document.title;
+        let flag = false;
+        titleFlashTimer = setInterval(() => {
+            document.title = flag ? `🚨 [${text}]` : `⚔️ [READY - STAKEOUT RADAR]`;
+            flag = !flag;
+        }, 600);
+        const clearOnFocus = () => {
+            stopTitleFlash();
+            window.removeEventListener('focus', clearOnFocus);
+        };
+        window.addEventListener('focus', clearOnFocus);
+        setTimeout(() => stopTitleFlash(), 30000);
+    }
+    function stopTitleFlash() {
+        if (titleFlashTimer) {
+            clearInterval(titleFlashTimer);
+            titleFlashTimer = null;
+        }
+        if (originalPageTitle) {
+            document.title = originalPageTitle;
+            originalPageTitle = null;
+        }
+    }
+
+    // Signals local Windows companion bridge on 127.0.0.1:8766 to bring browser window to absolute front
+    function triggerOsAutoFocus() {
+        if (!config.osAutoFocus) return;
+        try {
+            fetch('http://127.0.0.1:8766/focus', { mode: 'no-cors' }).catch(() => {});
+        } catch (e) {}
+    }
+
+    // High-Volume Procedural Web Audio Engine with Piercing Multi-Harmonic Profiles
     function playStakeoutAlarm(type = 'okay') {
         if (!config.soundAlarm) return;
         try {
@@ -358,74 +424,172 @@
             if (!ctx) return;
             if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-            if (type === 'okay') {
-                const osc1 = ctx.createOscillator();
-                const osc2 = ctx.createOscillator();
-                const gain = ctx.createGain();
+            const vol = Math.max(0.1, Math.min(1.0, config.alarmVolume ?? 1.0));
+            const soundType = config.alarmSoundType || 'siren';
 
-                osc1.type = 'sine';
-                osc2.type = 'triangle';
-                osc1.frequency.setValueAtTime(880, ctx.currentTime);
-                osc1.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
-                osc2.frequency.setValueAtTime(1320, ctx.currentTime + 0.15);
-                osc2.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.35);
+            if (type === 'okay' || type === 'test') {
+                const masterGain = ctx.createGain();
+                masterGain.gain.setValueAtTime(0.85 * vol, ctx.currentTime);
+                masterGain.connect(ctx.destination);
 
-                gain.gain.setValueAtTime(0.35, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.55);
+                if (soundType === 'siren') {
+                    // Emergency Dual-Tone Klaxon (Ultra-Loud, Piercing Sawtooth+Square Stack)
+                    // 3 rapid alternating high-frequency cycles (880Hz <-> 1760Hz) over 1.2s
+                    for (let cycle = 0; cycle < 3; cycle++) {
+                        const t0 = ctx.currentTime + (cycle * 0.4);
+                        // High pitch pulse
+                        const osc1a = ctx.createOscillator();
+                        const osc1b = ctx.createOscillator();
+                        const g1 = ctx.createGain();
+                        osc1a.type = 'sawtooth';
+                        osc1b.type = 'square';
+                        osc1a.frequency.setValueAtTime(1760, t0);
+                        osc1b.frequency.setValueAtTime(1760, t0);
+                        g1.gain.setValueAtTime(0.5, t0);
+                        g1.gain.exponentialRampToValueAtTime(0.01, t0 + 0.18);
+                        osc1a.connect(g1);
+                        osc1b.connect(g1);
+                        g1.connect(masterGain);
+                        osc1a.start(t0);
+                        osc1b.start(t0);
+                        osc1a.stop(t0 + 0.18);
+                        osc1b.stop(t0 + 0.18);
 
-                osc1.connect(gain);
-                osc2.connect(gain);
-                gain.connect(ctx.destination);
-
-                osc1.start(ctx.currentTime);
-                osc2.start(ctx.currentTime + 0.15);
-                osc1.stop(ctx.currentTime + 0.15);
-                osc2.stop(ctx.currentTime + 0.55);
+                        // Low pitch response
+                        const osc2a = ctx.createOscillator();
+                        const osc2b = ctx.createOscillator();
+                        const g2 = ctx.createGain();
+                        osc2a.type = 'sawtooth';
+                        osc2b.type = 'square';
+                        osc2a.frequency.setValueAtTime(988, t0 + 0.2);
+                        osc2b.frequency.setValueAtTime(988, t0 + 0.2);
+                        g2.gain.setValueAtTime(0.5, t0 + 0.2);
+                        g2.gain.exponentialRampToValueAtTime(0.01, t0 + 0.38);
+                        osc2a.connect(g2);
+                        osc2b.connect(g2);
+                        g2.connect(masterGain);
+                        osc2a.start(t0 + 0.2);
+                        osc2b.start(t0 + 0.2);
+                        osc2a.stop(t0 + 0.38);
+                        osc2b.stop(t0 + 0.38);
+                    }
+                } else if (soundType === 'horn') {
+                    // Tactical Air Horn (Triad Chord Blast: 440Hz + 554.37Hz + 659.25Hz)
+                    // 2 heavy blasts: blast 1 (0.32s), pause (0.1s), blast 2 (0.48s)
+                    const blasts = [
+                        { start: ctx.currentTime, dur: 0.32 },
+                        { start: ctx.currentTime + 0.42, dur: 0.48 }
+                    ];
+                    blasts.forEach(b => {
+                        [440, 554.37, 659.25].forEach(freq => {
+                            const osc = ctx.createOscillator();
+                            const g = ctx.createGain();
+                            osc.type = 'sawtooth';
+                            osc.frequency.setValueAtTime(freq, b.start);
+                            g.gain.setValueAtTime(0.33, b.start);
+                            g.gain.exponentialRampToValueAtTime(0.01, b.start + b.dur);
+                            osc.connect(g);
+                            g.connect(masterGain);
+                            osc.start(b.start);
+                            osc.stop(b.start + b.dur);
+                        });
+                    });
+                } else if (soundType === 'klaxon') {
+                    // Heavy War Alarm Pulse: 2 rising/falling pitch sweeps (587Hz -> 1174Hz -> 587Hz)
+                    for (let i = 0; i < 2; i++) {
+                        const t0 = ctx.currentTime + (i * 0.55);
+                        const osc = ctx.createOscillator();
+                        const g = ctx.createGain();
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(587.33, t0);
+                        osc.frequency.linearRampToValueAtTime(1174.66, t0 + 0.25);
+                        osc.frequency.linearRampToValueAtTime(587.33, t0 + 0.5);
+                        g.gain.setValueAtTime(0.8, t0);
+                        g.gain.exponentialRampToValueAtTime(0.01, t0 + 0.5);
+                        osc.connect(g);
+                        g.connect(masterGain);
+                        osc.start(t0);
+                        osc.stop(t0 + 0.5);
+                    }
+                } else {
+                    // Bright High Chime (1046.5Hz -> 1568Hz)
+                    const t0 = ctx.currentTime;
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const g1 = ctx.createGain();
+                    const g2 = ctx.createGain();
+                    osc1.type = 'sine';
+                    osc2.type = 'triangle';
+                    osc1.frequency.setValueAtTime(1046.5, t0);
+                    osc2.frequency.setValueAtTime(1567.98, t0 + 0.18);
+                    g1.gain.setValueAtTime(0.7, t0);
+                    g1.gain.exponentialRampToValueAtTime(0.01, t0 + 0.5);
+                    g2.gain.setValueAtTime(0.8, t0 + 0.18);
+                    g2.gain.exponentialRampToValueAtTime(0.01, t0 + 0.7);
+                    osc1.connect(g1);
+                    osc2.connect(g2);
+                    g1.connect(masterGain);
+                    g2.connect(masterGain);
+                    osc1.start(t0);
+                    osc2.start(t0 + 0.18);
+                    osc1.stop(t0 + 0.5);
+                    osc2.stop(t0 + 0.7);
+                }
             } else if (type === 'online') {
+                // Target Online / Active (High double chirp)
+                const masterGain = ctx.createGain();
+                masterGain.gain.setValueAtTime(0.65 * vol, ctx.currentTime);
+                masterGain.connect(ctx.destination);
                 const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
+                const g = ctx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-                osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.12);
-                gain.gain.setValueAtTime(0.25, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(659.25, ctx.currentTime);
+                osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+                g.gain.setValueAtTime(0.7, ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                osc.connect(g);
+                g.connect(masterGain);
                 osc.start();
                 osc.stop(ctx.currentTime + 0.35);
-            } else {
-                for (let i = 0; i < 3; i++) {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    const start = ctx.currentTime + (i * 0.14);
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(980, start);
-                    gain.gain.setValueAtTime(0.2, start);
-                    gain.gain.exponentialRampToValueAtTime(0.01, start + 0.1);
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start(start);
-                    osc.stop(start + 0.1);
-                }
             }
         } catch (e) {
             console.error('[Stakeout] Audio error:', e);
         }
     }
 
-    // --- 4. DESKTOP NOTIFICATIONS ---
+    // --- 4. DESKTOP NOTIFICATIONS & WINDOW FOCUS ---
     function sendStakeoutNotification(title, body, url) {
         if (!config.desktopNotif) return;
+        try {
+            if (typeof GM_notification === 'function') {
+                GM_notification({
+                    title: `🎯 Stakeout: ${title}`,
+                    text: body,
+                    image: 'https://www.torn.com/favicon.ico',
+                    highlight: true,
+                    timeout: 20000,
+                    onclick: () => {
+                        window.focus();
+                        if (url) openTornUrl(url, true);
+                    }
+                });
+                return;
+            }
+        } catch (e) {}
         try {
             if ('Notification' in window) {
                 if (Notification.permission === 'granted') {
                     const notif = new Notification(`🎯 Stakeout: ${title}`, {
                         body: body,
-                        icon: 'https://www.torn.com/favicon.ico'
+                        icon: 'https://www.torn.com/favicon.ico',
+                        requireInteraction: true,
+                        silent: true
                     });
-                    if (url) {
-                        notif.onclick = () => window.open(url, '_blank');
-                    }
+                    notif.onclick = () => {
+                        window.focus();
+                        if (url) openTornUrl(url, true);
+                        try { notif.close(); } catch (e) {}
+                    };
                 } else if (Notification.permission !== 'denied') {
                     Notification.requestPermission();
                 }
@@ -474,12 +638,10 @@
         lastAttackTabOpened[targetId] = now;
         try {
             const attackUrl = `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`;
-            const win = window.open(attackUrl, '_blank');
-            if (!win || win.closed || typeof win.closed === 'undefined') {
-                showStakeoutToast('⚠️ Attack tab popup was blocked by browser. Please allow popups for torn.com!');
-            } else {
-                showStakeoutToast(`⚔️ Auto-opened attack tab for [${targetId}] (Online & Okay)!`);
-            }
+            openTornUrl(attackUrl, true);
+            window.focus();
+            triggerOsAutoFocus();
+            showStakeoutToast(`⚔️ Auto-opened attack tab for [${targetId}] (Online & Okay)!`);
         } catch (e) {
             console.error('[Stakeout] Auto attack popup error:', e);
         }
@@ -513,11 +675,14 @@
             // Transition: Target discharged or medded out of hospital
             if (config.alertOnOkay && !wasOkay && isNowOkay) {
                 playStakeoutAlarm('okay');
+                startTitleFlash(`${currentSnapshot.name} IS OKAY!`);
                 sendStakeoutNotification(
                     `${currentSnapshot.name} is OKAY!`,
                     `Target discharged or medded out of hospital! Click to launch attack.`,
                     `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
                 );
+                window.focus();
+                triggerOsAutoFocus();
                 // Auto-open attack tab if target is Online AND Okay
                 if (config.autoOpenAttack && isNowOnline && isNowOkay) {
                     triggerAutoAttackOpen(targetId);
@@ -527,11 +692,14 @@
             // Transition: Target came online or active
             if (config.alertOnOnline && !wasOnline && isNowOnline) {
                 playStakeoutAlarm('online');
+                startTitleFlash(`${currentSnapshot.name} ONLINE!`);
                 sendStakeoutNotification(
                     `${currentSnapshot.name} is ONLINE!`,
                     `Activity detected (${currentSnapshot.online}): ${currentSnapshot.lastActionRel}`,
                     `https://www.torn.com/profiles.php?XID=${targetId}`
                 );
+                window.focus();
+                triggerOsAutoFocus();
                 // Auto-open attack tab if target is Online AND Okay
                 if (config.autoOpenAttack && isNowOnline && isNowOkay) {
                     triggerAutoAttackOpen(targetId);
@@ -541,11 +709,14 @@
             // Transition: Flight landing
             if (config.alertOnLanding && previous.state === 'Traveling' && currentSnapshot.state !== 'Traveling') {
                 playStakeoutAlarm('okay');
+                startTitleFlash(`${currentSnapshot.name} LANDED!`);
                 sendStakeoutNotification(
                     `${currentSnapshot.name} LANDED!`,
                     `Flight arrived: now ${currentSnapshot.state} (${currentSnapshot.desc})`,
                     `https://www.torn.com/profiles.php?XID=${targetId}`
                 );
+                window.focus();
+                triggerOsAutoFocus();
                 // Auto-open attack tab if target landed and is Online AND Okay
                 if (config.autoOpenAttack && isNowOnline && isNowOkay) {
                     triggerAutoAttackOpen(targetId);
@@ -555,11 +726,14 @@
             // Transition: Full HP
             if (config.alertOnFullHp && previous.hpPct < 100 && currentSnapshot.hpPct >= 100) {
                 playStakeoutAlarm('online');
+                startTitleFlash(`${currentSnapshot.name} 100% HP!`);
                 sendStakeoutNotification(
                     `${currentSnapshot.name} reached 100% HP!`,
                     `Life fully recovered: ${currentSnapshot.hpCurr.toLocaleString()} / ${currentSnapshot.hpMax.toLocaleString()}`,
                     `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
                 );
+                window.focus();
+                triggerOsAutoFocus();
             }
         }
 
@@ -1023,16 +1197,36 @@
                         <input type="checkbox" id="toggle-alert-fullhp" ${config.alertOnFullHp ? 'checked' : ''} />
                     </label>
                     <label class="stakeout-toggle-row">
-                        <span>Audio Sound Alarm (Chime/Horn)</span>
+                        <span>Audio Sound Alarm</span>
                         <input type="checkbox" id="toggle-sound-alarm" ${config.soundAlarm ? 'checked' : ''} />
                     </label>
                     <label class="stakeout-toggle-row">
-                        <span>Desktop Notification</span>
+                        <span>🔊 Alarm Volume</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="range" id="stakeout-vol-slider" min="10" max="100" value="${Math.round((config.alarmVolume ?? 1.0) * 100)}" style="width: 80px; cursor: pointer; accent-color: #38bdf8;" />
+                            <span id="stakeout-vol-label" style="font-size: 11px; font-family: monospace; min-width: 32px; text-align: right; color: #38bdf8;">${Math.round((config.alarmVolume ?? 1.0) * 100)}%</span>
+                        </div>
+                    </label>
+                    <label class="stakeout-toggle-row">
+                        <span>🎵 Sound Profile</span>
+                        <select id="stakeout-sound-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                            <option value="siren" ${(config.alarmSoundType || 'siren') === 'siren' ? 'selected' : ''}>🚨 Emergency Siren (Loudest)</option>
+                            <option value="horn" ${(config.alarmSoundType || 'siren') === 'horn' ? 'selected' : ''}>📯 Tactical Air Horn</option>
+                            <option value="klaxon" ${(config.alarmSoundType || 'siren') === 'klaxon' ? 'selected' : ''}>⚠️ Heavy Klaxon</option>
+                            <option value="chime" ${(config.alarmSoundType || 'siren') === 'chime' ? 'selected' : ''}>🔔 Bright Chime</option>
+                        </select>
+                    </label>
+                    <label class="stakeout-toggle-row" title="Persistent desktop banner pinned on screen over other apps until clicked">
+                        <span>Desktop Notification (Persistent)</span>
                         <input type="checkbox" id="toggle-desktop-notif" ${config.desktopNotif ? 'checked' : ''} />
                     </label>
-                    <label class="stakeout-toggle-row" title="Automatically opens the pre-staged attack tab in a new window when target is both Active (Online/Idle) and Attackable (Okay)">
+                    <label class="stakeout-toggle-row" title="Automatically opens the pre-staged attack tab in an active tab when target is both Active (Online/Idle) and Attackable (Okay)">
                         <span>Auto-Open Attack Tab (Online & Okay)</span>
                         <input type="checkbox" id="toggle-auto-attack" ${config.autoOpenAttack ? 'checked' : ''} />
+                    </label>
+                    <label class="stakeout-toggle-row" title="Pings local companion bridge on 127.0.0.1:8766 to bring browser window to the front over other apps">
+                        <span>⚡ OS Auto-Focus (Companion Bridge)</span>
+                        <input type="checkbox" id="toggle-os-autofocus" ${config.osAutoFocus ? 'checked' : ''} />
                     </label>
 
                     <div style="border-top: 1px solid #334155; margin-top: 4px; padding-top: 6px;">
@@ -1104,6 +1298,26 @@
         const tSound = document.getElementById('toggle-sound-alarm');
         if (tSound) tSound.onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
 
+        const volSlider = document.getElementById('stakeout-vol-slider');
+        const volLabel = document.getElementById('stakeout-vol-label');
+        if (volSlider) {
+            volSlider.oninput = (e) => {
+                const val = parseInt(e.target.value, 10) || 100;
+                config.alarmVolume = val / 100;
+                if (volLabel) volLabel.textContent = `${val}%`;
+            };
+            volSlider.onchange = () => saveConfig();
+        }
+
+        const soundSelect = document.getElementById('stakeout-sound-select');
+        if (soundSelect) {
+            soundSelect.onchange = (e) => {
+                config.alarmSoundType = e.target.value;
+                saveConfig();
+                playStakeoutAlarm('test');
+            };
+        }
+
         const tNotif = document.getElementById('toggle-desktop-notif');
         if (tNotif) {
             tNotif.onchange = (e) => {
@@ -1118,8 +1332,16 @@
         const tAutoAttack = document.getElementById('toggle-auto-attack');
         if (tAutoAttack) tAutoAttack.onchange = (e) => { config.autoOpenAttack = e.target.checked; saveConfig(); };
 
+        const tOsFocus = document.getElementById('toggle-os-autofocus');
+        if (tOsFocus) {
+            tOsFocus.onchange = (e) => {
+                config.osAutoFocus = e.target.checked;
+                saveConfig();
+            };
+        }
+
         const testSoundBtn = document.getElementById('stakeout-btn-test-sound');
-        if (testSoundBtn) testSoundBtn.onclick = () => playStakeoutAlarm('okay');
+        if (testSoundBtn) testSoundBtn.onclick = () => playStakeoutAlarm('test');
 
         const checkUpdateBtn = document.getElementById('stakeout-btn-check-update');
         if (checkUpdateBtn) checkUpdateBtn.onclick = () => checkForScriptUpdates(true);
