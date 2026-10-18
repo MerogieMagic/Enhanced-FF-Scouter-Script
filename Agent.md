@@ -2639,4 +2639,41 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-18 22:51:30 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 113
+- **Focus**: Transition to Alert-Only Operation — Elimination of Automatic Attack Tab Launching, Settings Sanitization, and Manual Attack Execution Retention in `torn_mercenary_stakeout.user.js` (`v1.09`).
+  - **User Directive**:
+    - "slight adjustment, i do not need you to open the attack page for me, just alert me will do"
+  - **Requirement & Architectural Analysis**:
+    1. *Alert-Only Philosophy*:
+       - Automatically popping up attack browser tabs disrupts the user's active browsing workflow or takes focus away unexpectedly while multitasking.
+       - The user prefers to receive high-fidelity alerts (audible siren/klaxon alarms, OS window raising via `focus_companion.py`, desktop notifications, dynamic tab title flashing, and on-screen radar toasts) and manually initiate the attack when they are ready.
+    2. *Complete Elimination of Auto-Attack Pathways*:
+       - All automatic invocation of attack URL opening triggered by target status transitions (e.g. target becoming Okay & Active, hospital timer dropping to $\le 5$ minutes, target landing from flight, or reaching 100% HP) has been completely eliminated.
+       - Desktop notification banner clicks now bring the browser window to focus via `window.focus()` without forcibly spawning new attack tabs.
+       - The manual 1-click `⚔️ ATTACK TARGET` button on target cards in the radar dock remains fully available and interactive for manual execution.
+    3. *Legacy Configuration Sanitization*:
+       - In addition to removing `autoOpenAttack` from `DEFAULT_CONFIG`, `delete config.autoOpenAttack;` is executed on initialization to purge any legacy `autoOpenAttack: true` or `autoOpenAttack: false` saved in browser `localStorage`.
+       - Removed the `Auto-Open Attack Tab (Online & Okay)` checkbox and associated event listeners from the Radar Settings panel to keep the UI clean and uncluttered.
+  - **Code Implementations (`v1.09`)**:
+    1. *Version Increment*:
+       - Bumped version to `1.09` in both `torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js`.
+    2. *Engine & Trigger Purge*:
+       - Completely removed the `triggerAutoAttackOpen` function.
+       - Removed all calls to `triggerAutoAttackOpen` in `evaluateTargetTriggers` (for both attack-ready transitions and flight arrivals).
+       - Updated `sendStakeoutNotification` to take `(title, body)` only, removing URL opening on notification banner click.
+       - Removed residual URL arguments from all `sendStakeoutNotification` calls across hospital countdown, ready/active, flight landing, and full HP triggers.
+    3. *Radar UI & Settings Cleanup*:
+       - Removed `#toggle-auto-attack` checkbox and label from `renderRadarUI`.
+       - Removed `tAutoAttack.onchange` listener from settings event bindings.
+  - **Files Updated**:
+    - `torn_mercenary_stakeout.user.js` (bumped to **v1.09**)
+    - `torn_mercenary_stakeout.meta.js` (bumped to **v1.09**)
+    - `Agent.md` (documented Session 113)
+  - **Verification**:
+    - `node --check torn_mercenary_stakeout.user.js` (exit code 0).
+    - `node --check torn_mercenary_stakeout.meta.js` (exit code 0).
+  - **Date & Time**: 2026-10-18 22:56:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 

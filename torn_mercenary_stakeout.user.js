@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.08
+// @version      1.09
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.08";
+    const SCRIPT_VERSION = "1.09";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -295,7 +295,6 @@
         alarmVolume: 1.0,           // 0.1 to 1.0 (10% to 100%)
         alarmSoundType: 'siren',    // 'siren' (loudest) | 'horn' | 'klaxon' | 'chime'
         desktopNotif: true,
-        autoOpenAttack: false,
         osAutoFocus: true,          // pings local focus companion on 127.0.0.1:8766
         rapidHospPolling: true,
         pollingInterval: 5, // seconds
@@ -304,6 +303,7 @@
     };
 
     let config = Object.assign({}, DEFAULT_CONFIG, getStorage('config', {}));
+    delete config.autoOpenAttack;
     function saveConfig() {
         setStorage('config', config);
     }
@@ -690,7 +690,7 @@
     }
 
     // --- 4. DESKTOP NOTIFICATIONS & WINDOW FOCUS ---
-    function sendStakeoutNotification(title, body, url) {
+    function sendStakeoutNotification(title, body) {
         if (!config.desktopNotif) return;
         try {
             if (typeof GM_notification === 'function') {
@@ -702,7 +702,6 @@
                     timeout: 20000,
                     onclick: () => {
                         window.focus();
-                        if (url) openTornUrl(url, true);
                     }
                 });
                 return;
@@ -719,7 +718,6 @@
                     });
                     notif.onclick = () => {
                         window.focus();
-                        if (url) openTornUrl(url, true);
                         try { notif.close(); } catch (e) {}
                     };
                 } else if (Notification.permission !== 'denied') {
@@ -760,24 +758,6 @@
     }
 
     // --- 6. TRIGGER EVALUATION & ATTACK STAGING ENGINE ---
-    const lastAttackTabOpened = {};
-    function triggerAutoAttackOpen(targetId) {
-        if (!config.autoOpenAttack) return;
-        const now = Date.now();
-        if (lastAttackTabOpened[targetId] && now - lastAttackTabOpened[targetId] < 30000) {
-            return;
-        }
-        lastAttackTabOpened[targetId] = now;
-        try {
-            const attackUrl = `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`;
-            openTornUrl(attackUrl, true);
-            window.focus();
-            triggerOsAutoFocus();
-            showStakeoutToast(`⚔️ Auto-opened attack tab for [${targetId}] (Online & Okay)!`);
-        } catch (e) {
-            console.error('[Stakeout] Auto attack popup error:', e);
-        }
-    }
 
     // Helper predicates for the 2-Condition Rule:
     // 1. Target must be Okay and ready (attackable)
@@ -864,8 +844,7 @@
                 startTitleFlash(`${currentSnapshot.name} HOSP < ${minLeft}M!`);
                 sendStakeoutNotification(
                     `⚠️ ${currentSnapshot.name} Hospital < 5 Mins!`,
-                    `Release in ~${minLeft}m (${remainingSec}s). Target is active (${currentSnapshot.online})! Pre-stage attack.`,
-                    `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
+                    `Release in ~${minLeft}m (${remainingSec}s). Target is active (${currentSnapshot.online})! Pre-stage attack.`
                 );
                 window.focus();
                 triggerOsAutoFocus();
@@ -890,17 +869,11 @@
                 startTitleFlash(`${currentSnapshot.name} READY (ACTIVE)!`);
                 sendStakeoutNotification(
                     `⚔️ ${currentSnapshot.name} is OKAY & ACTIVE!`,
-                    `Target is attackable (Okay) and active (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})! Click to launch attack.`,
-                    `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
+                    `Target is attackable (Okay) and active (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})!`
                 );
                 window.focus();
                 triggerOsAutoFocus();
                 showStakeoutToast(`⚔️ Target [${currentSnapshot.name}] is OKAY & ACTIVE (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})! Attack now.`);
-
-                // Auto-open attack tab if enabled
-                if (config.autoOpenAttack) {
-                    triggerAutoAttackOpen(targetId);
-                }
             }
 
             // --- 3. FLIGHT LANDING (while active) ---
@@ -912,14 +885,10 @@
                         startTitleFlash(`${currentSnapshot.name} LANDED!`);
                         sendStakeoutNotification(
                             `${currentSnapshot.name} LANDED!`,
-                            `Flight arrived: now ${currentSnapshot.state} (${currentSnapshot.desc}) • Active: ${currentSnapshot.online}`,
-                            `https://www.torn.com/profiles.php?XID=${targetId}`
+                            `Flight arrived: now ${currentSnapshot.state} (${currentSnapshot.desc}) • Active: ${currentSnapshot.online}`
                         );
                         window.focus();
                         triggerOsAutoFocus();
-                        if (config.autoOpenAttack) {
-                            triggerAutoAttackOpen(targetId);
-                        }
                     }
                 }
             }
@@ -932,8 +901,7 @@
                     startTitleFlash(`${currentSnapshot.name} 100% HP!`);
                     sendStakeoutNotification(
                         `${currentSnapshot.name} reached 100% HP!`,
-                        `Life fully recovered: ${currentSnapshot.hpCurr.toLocaleString()} / ${currentSnapshot.hpMax.toLocaleString()}`,
-                        `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`
+                        `Life fully recovered: ${currentSnapshot.hpCurr.toLocaleString()} / ${currentSnapshot.hpMax.toLocaleString()}`
                     );
                     window.focus();
                     triggerOsAutoFocus();
@@ -1454,10 +1422,6 @@
                         <span>Desktop Notification (Persistent)</span>
                         <input type="checkbox" id="toggle-desktop-notif" ${config.desktopNotif ? 'checked' : ''} />
                     </label>
-                    <label class="stakeout-toggle-row" title="Automatically opens the pre-staged attack tab in an active tab when target is both Active (Online/Idle) and Attackable (Okay)">
-                        <span>Auto-Open Attack Tab (Online & Okay)</span>
-                        <input type="checkbox" id="toggle-auto-attack" ${config.autoOpenAttack ? 'checked' : ''} />
-                    </label>
                     <label class="stakeout-toggle-row" title="Pings local companion bridge on 127.0.0.1:8766 to bring browser window to the front over other apps">
                         <span>⚡ OS Auto-Focus (Companion Bridge)</span>
                         <input type="checkbox" id="toggle-os-autofocus" ${config.osAutoFocus ? 'checked' : ''} />
@@ -1565,9 +1529,6 @@
                 }
             };
         }
-
-        const tAutoAttack = document.getElementById('toggle-auto-attack');
-        if (tAutoAttack) tAutoAttack.onchange = (e) => { config.autoOpenAttack = e.target.checked; saveConfig(); };
 
         const tOsFocus = document.getElementById('toggle-os-autofocus');
         if (tOsFocus) {
