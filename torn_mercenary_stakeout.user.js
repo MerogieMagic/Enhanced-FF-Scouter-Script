@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.10
+// @version      1.12
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.10";
+    const SCRIPT_VERSION = "1.12";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -294,7 +294,7 @@
         alarmSoundType: 'siren',    // 'siren' (loudest) | 'horn' | 'klaxon' | 'chime'
         desktopNotif: true,
         osAutoFocus: true,          // pings local focus companion on 127.0.0.1:8766
-        rapidHospPolling: true,     // Rapidly poll targets nearing hospital discharge (< 5m)
+        rapidHospPolling: true,     // Dynamically increase to 1s polling when target hospital discharge <= 1 min (otherwise 5s)
         pollingInterval: 5, // seconds
         isPaused: false,
         isMinimized: false
@@ -314,6 +314,40 @@
 
     function saveWatchlist() {
         setStorage('watchlist', watchlist);
+    }
+
+    let targetMeta = getStorage('target_meta', {});
+    if (typeof targetMeta !== 'object' || targetMeta === null) targetMeta = {};
+
+    function saveTargetMeta() {
+        setStorage('target_meta', targetMeta);
+    }
+
+    function isTargetStricken(targetId) {
+        return Boolean(targetMeta[targetId]?.isStricken);
+    }
+
+    function setTargetStricken(targetId, isStricken) {
+        if (!targetMeta[targetId]) targetMeta[targetId] = {};
+        targetMeta[targetId].isStricken = Boolean(isStricken);
+        saveTargetMeta();
+    }
+
+    function getTargetInactiveLimit(targetId) {
+        const custom = parseInt(targetMeta[targetId]?.inactiveLimitMin, 10);
+        if (custom > 0) return custom;
+        return parseInt(config.activeThresholdMin, 10) || 5;
+    }
+
+    function setTargetInactiveLimit(targetId, mins) {
+        if (!targetMeta[targetId]) targetMeta[targetId] = {};
+        const parsed = parseInt(mins, 10);
+        if (parsed > 0) {
+            targetMeta[targetId].inactiveLimitMin = parsed;
+        } else {
+            delete targetMeta[targetId].inactiveLimitMin;
+        }
+        saveTargetMeta();
     }
 
     const targetsCache = {};
@@ -762,13 +796,16 @@
     // Helper predicates for the Strict 2-Condition Rule:
     // Criteria 1: Target must be Out and alive (Okay state, HP > 0, not Hospital/Jail/Traveling/Abroad/Federal/Fallen)
     // Criteria 2: Target must be Online or have last action within 5 minutes
-    function isTargetActiveWithin5Min(snapshot, nowSec = Math.floor(Date.now() / 1000)) {
+    function isTargetActiveWithinLimit(snapshot, nowSec = Math.floor(Date.now() / 1000), targetId = null) {
         if (!snapshot) return false;
         if (snapshot.online === 'Online') return true;
 
+        const limitMin = targetId ? getTargetInactiveLimit(targetId) : (parseInt(config.activeThresholdMin, 10) || 5);
+        const limitSec = limitMin * 60;
+
         if (snapshot.lastActionTs > 0) {
             const ageSec = nowSec - snapshot.lastActionTs;
-            if (ageSec >= 0 && ageSec <= (config.activeThresholdMin || 5) * 60) return true;
+            if (ageSec >= 0 && ageSec <= limitSec) return true;
         }
 
         const rel = (snapshot.lastActionRel || '').toLowerCase();
@@ -776,7 +813,7 @@
         const m = rel.match(/(\d+)\s*(?:minute|min)/);
         if (m) {
             const mins = parseInt(m[1], 10);
-            if (mins <= (config.activeThresholdMin || 5)) return true;
+            if (mins <= limitMin) return true;
         }
         const s = rel.match(/(\d+)\s*(?:second|sec)/);
         if (s) return true;
@@ -795,9 +832,9 @@
 
     // Both criteria must be met:
     // 1. Out and alive
-    // 2. Online or last action within 5 mins
-    function isTargetAttackEligible(snapshot, nowSec = Math.floor(Date.now() / 1000)) {
-        return isTargetOutAndAlive(snapshot) && isTargetActiveWithin5Min(snapshot, nowSec);
+    // 2. Online or last action within configured inactive limit
+    function isTargetAttackEligible(snapshot, nowSec = Math.floor(Date.now() / 1000), targetId = null) {
+        return isTargetOutAndAlive(snapshot) && isTargetActiveWithinLimit(snapshot, nowSec, targetId);
     }
 
     function evaluateTargetTriggers(targetId, freshData) {
@@ -820,15 +857,15 @@
         const existing = targetsCache[targetId];
         const previous = existing ? existing.data : null;
         const nowSec = Math.floor(Date.now() / 1000);
+        const limitMin = getTargetInactiveLimit(targetId);
+        const isStricken = isTargetStricken(targetId);
 
-        const isNowEligible = isTargetAttackEligible(currentSnapshot, nowSec);
-        const wasEligible = previous ? isTargetAttackEligible(previous, nowSec) : false;
+        const isNowEligible = isTargetAttackEligible(currentSnapshot, nowSec, targetId);
+        const wasEligible = previous ? isTargetAttackEligible(previous, nowSec, targetId) : false;
 
-        if (previous) {
-            // --- 1. MAIN ATTACK ALARM: TARGET MET BOTH CRITERIA (Out & Alive + Online/Active <= 5m) ---
-            // Triggers ONLY when target transitions into satisfying BOTH criteria:
-            // Criteria 1: Target is Out and alive (Okay state & HP > 0)
-            // Criteria 2: Target is Online or last action within 5 mins
+        // Stricken targets have alarms silenced so completed contracts do not sound sirens
+        if (previous && !isStricken) {
+            // --- 1. MAIN ATTACK ALARM: TARGET MET BOTH CRITERIA (Out & Alive + Online/Active <= limitMin) ---
             const becameEligible = !wasEligible && isNowEligible;
 
             if (config.alertOnOkay && becameEligible) {
@@ -836,11 +873,11 @@
                 startTitleFlash(`${currentSnapshot.name} READY (ACTIVE)!`);
                 sendStakeoutNotification(
                     `⚔️ ${currentSnapshot.name} is OUT & ACTIVE!`,
-                    `Target is Out & Alive (Okay) and active (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})!`
+                    `Target is Out & Alive (Okay) and active (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || `within ${limitMin}m`})!`
                 );
                 window.focus();
                 triggerOsAutoFocus();
-                showStakeoutToast(`⚔️ Target [${currentSnapshot.name}] is OUT & ACTIVE (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})! Attack now.`);
+                showStakeoutToast(`⚔️ Target [${currentSnapshot.name}] is OUT & ACTIVE (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || `within ${limitMin}m`})! Attack now.`);
             }
 
             // --- 2. FLIGHT LANDING (Strictly requiring BOTH criteria: Out & Alive + Active) ---
@@ -1208,6 +1245,67 @@
             color: #cbd5e1 !important;
             box-shadow: none !important;
         }
+        .stakeout-attack-btn.stricken-attack {
+            background: #1e3a8a !important;
+            border-color: #3b82f6 !important;
+            color: #93c5fd !important;
+        }
+        .stakeout-attack-btn.stricken-attack:hover {
+            background: #1d4ed8 !important;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5) !important;
+        }
+
+        .stakeout-card.stricken {
+            opacity: 0.85;
+            border-color: #475569 !important;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, #0f172a 100%) !important;
+        }
+        .stakeout-card-name.name-stricken {
+            text-decoration: line-through !important;
+            color: #94a3b8 !important;
+        }
+        .stakeout-card-subbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3px 6px;
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid #334155;
+            border-radius: 4px;
+            font-size: 10.5px;
+        }
+        .stakeout-checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .stakeout-checkbox-label input {
+            cursor: pointer;
+            width: 13px;
+            height: 13px;
+            margin: 0;
+            accent-color: #ef4444;
+        }
+        .stakeout-target-limit-select {
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #f8fafc;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 10px;
+            cursor: pointer;
+            outline: none;
+        }
+        .stakeout-target-limit-select:focus {
+            border-color: #38bdf8;
+        }
+        .stakeout-status-pill.stricken-pill {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+        }
 
         .stakeout-settings {
             background: #0f172a;
@@ -1299,8 +1397,9 @@
 
         const nowSec = Math.floor(Date.now() / 1000);
         const readyCount = watchlist.filter(id => {
+            if (isTargetStricken(id)) return false;
             const t = targetsCache[id]?.data;
-            return t && isTargetAttackEligible(t, nowSec);
+            return t && isTargetAttackEligible(t, nowSec, id);
         }).length;
 
         if (config.isMinimized) {
@@ -1349,9 +1448,20 @@
 
                 <div id="stakeout-settings-panel" class="stakeout-settings" style="display: none;">
                     <div style="font-weight: 800; color: #f8fafc; margin-bottom: 2px;">⚡ Stakeout Trigger Toggles:</div>
-                    <label class="stakeout-toggle-row" title="Requires target to meet BOTH criteria: 1. Out & Alive, and 2. Online or last action within 5 mins">
+                    <label class="stakeout-toggle-row" title="Requires target to meet BOTH criteria: 1. Out & Alive, and 2. Online or last action within configured limit">
                         <span>⚔️ Alert on Attack Eligible (Out & Active)</span>
                         <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
+                    </label>
+                    <label class="stakeout-toggle-row" title="Global threshold for activity (Online or last action within this many minutes)">
+                        <span>⏱️ Inactive Limit (Default)</span>
+                        <select id="stakeout-inactive-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                            <option value="2" ${(config.activeThresholdMin || 5) === 2 ? 'selected' : ''}>2 Mins</option>
+                            <option value="5" ${(config.activeThresholdMin || 5) === 5 ? 'selected' : ''}>5 Mins (Default)</option>
+                            <option value="10" ${(config.activeThresholdMin || 5) === 10 ? 'selected' : ''}>10 Mins</option>
+                            <option value="15" ${(config.activeThresholdMin || 5) === 15 ? 'selected' : ''}>15 Mins</option>
+                            <option value="30" ${(config.activeThresholdMin || 5) === 30 ? 'selected' : ''}>30 Mins</option>
+                            <option value="60" ${(config.activeThresholdMin || 5) === 60 ? 'selected' : ''}>60 Mins (1 Hour)</option>
+                        </select>
                     </label>
                     <label class="stakeout-toggle-row" title="Alert on flight arrival (strictly requires target to be Out & Alive + Active in Torn)">
                         <span>Alert on Flight Landing (Out & Active)</span>
@@ -1408,7 +1518,7 @@
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 2px;">
                         <span>Radar v${SCRIPT_VERSION}</span>
-                        <span>Rate: ${callRate}/90 cpm • Poll: ${config.pollingInterval}s</span>
+                        <span id="stakeout-footer-rate">Rate: ${callRate}/90 cpm • Poll: ${currentPollingIntervalMs === 1000 ? '<b style="color: #f59e0b; animation: stakeout-glow-pulse 1s infinite;">1s ⚡ (RAPID)</b>' : `${config.pollingInterval || 5}s`}</span>
                     </div>
                 </div>
 
@@ -1446,6 +1556,15 @@
 
         const tOkay = document.getElementById('toggle-alert-okay');
         if (tOkay) tOkay.onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
+
+        const inactiveSelect = document.getElementById('stakeout-inactive-select');
+        if (inactiveSelect) {
+            inactiveSelect.onchange = (e) => {
+                config.activeThresholdMin = parseInt(e.target.value, 10) || 5;
+                saveConfig();
+                renderRadarUI();
+            };
+        }
 
         const tLanding = document.getElementById('toggle-alert-landing');
         if (tLanding) tLanding.onchange = (e) => { config.alertOnLanding = e.target.checked; saveConfig(); };
@@ -1590,30 +1709,42 @@
             ? `${Math.floor(remainingSec / 3600)}h ${Math.floor((remainingSec % 3600) / 60)}m ${remainingSec % 60}s`
             : 'Ready';
 
-        const stateKey = `${d.state}_${formattedTime}_${d.hpCurr}_${d.hpMax}_${d.online}`;
+        const isStricken = isTargetStricken(targetId);
+        const customLimit = parseInt(targetMeta[targetId]?.inactiveLimitMin, 10) || 0;
+        const effectiveLimit = getTargetInactiveLimit(targetId);
+
+        const isNearDischarge = d.state === 'Hospital' && remainingSec <= 60 && !isStricken;
+        const stateKey = `${d.state}_${formattedTime}_${d.hpCurr}_${d.hpMax}_${d.online}_${isStricken}_${effectiveLimit}_${isNearDischarge}`;
         if (card.dataset.lastStateKey === stateKey) return;
         card.dataset.lastStateKey = stateKey;
 
-        const isEligible = isTargetAttackEligible(d, nowSec);
+        const isEligible = isTargetAttackEligible(d, nowSec, targetId);
         const isOutAndAlive = isTargetOutAndAlive(d);
-        const isActive = isTargetActiveWithin5Min(d, nowSec);
+        const isActive = isTargetActiveWithinLimit(d, nowSec, targetId);
 
-        card.className = `stakeout-card ${isEligible ? 'ready' : ''}`;
+        card.className = `stakeout-card ${isEligible ? 'ready' : (isNearDischarge ? 'near-ready' : '')} ${isStricken ? 'stricken' : ''}`;
 
         let statusBadge = '';
+        if (isStricken) {
+            statusBadge += `<span class="stakeout-status-pill stricken-pill" title="Target marked as Stricken / Hit">🎯 STRICKEN</span> `;
+        }
         if (d.state === 'Hospital') {
-            statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
+            if (isNearDischarge) {
+                statusBadge += `<span class="stakeout-status-pill hospital near-ready" title="Hospital exit imminent (<= 1 min)! 1-second rapid refresh active. Exact: ${exactTooltip}">⚡ Hosp: ${formattedTime} (1s RAPID)</span>`;
+            } else {
+                statusBadge += `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
+            }
         } else if (d.state === 'Traveling') {
-            statusBadge = `<span class="stakeout-status-pill traveling" title="Exact remaining: ${exactTooltip}">✈️ ${d.desc || 'Traveling'} (${formattedTime})</span>`;
+            statusBadge += `<span class="stakeout-status-pill traveling" title="Exact remaining: ${exactTooltip}">✈️ ${d.desc || 'Traveling'} (${formattedTime})</span>`;
         } else if (d.state === 'Abroad') {
-            statusBadge = `<span class="stakeout-status-pill abroad">🌍 ${d.desc || 'Abroad'}</span>`;
+            statusBadge += `<span class="stakeout-status-pill abroad">🌍 ${d.desc || 'Abroad'}</span>`;
         } else if (d.state === 'Jail') {
-            statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🚔 Jail: ${formattedTime}</span>`;
+            statusBadge += `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🚔 Jail: ${formattedTime}</span>`;
         } else {
             if (isActive) {
-                statusBadge = `<span class="stakeout-status-pill okay" title="Target is Out & Alive, and Active within 5m!">⚡ OUT & ACTIVE</span>`;
+                statusBadge += `<span class="stakeout-status-pill okay" title="Target is Out & Alive, and Active within ${effectiveLimit}m!">⚡ OUT & ACTIVE</span>`;
             } else {
-                statusBadge = `<span class="stakeout-status-pill okay-offline" title="Target is Out & Alive, but inactive (> 5m ago)">💤 Okay (Inactive)</span>`;
+                statusBadge += `<span class="stakeout-status-pill okay-offline" title="Target is Out & Alive, but inactive (> ${effectiveLimit}m ago)">💤 Okay (Inactive)</span>`;
             }
         }
 
@@ -1623,15 +1754,15 @@
         if (d.hpPct < 25) hpBarFillClass = 'danger';
         else if (d.hpPct < 50) hpBarFillClass = 'warning';
 
-        // Attack Button: strictly require BOTH criteria (1. Out & Alive, 2. Online or action <= 5m)
+        // Attack Button: strictly require BOTH criteria (1. Out & Alive, 2. Online or action <= effectiveLimit)
         let attackBtnHtml = '';
         let lockToastMsg = '';
 
         if (isEligible) {
             attackBtnHtml = `
-                <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ready" title="Click to attack target [${d.name}]!">
+                <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ${isStricken ? 'stricken-attack' : 'ready'}" title="Click to attack target [${d.name}]!">
                     <span>⚔️ ATTACK TARGET</span>
-                    <span>⚡ (READY & ACTIVE!)</span>
+                    <span>${isStricken ? '🎯 (STRICKEN)' : '⚡ (READY & ACTIVE!)'}</span>
                 </a>
             `;
         } else {
@@ -1654,11 +1785,11 @@
                     lockToastMsg = `Target [${d.name}] has 0 HP! Must be Out & Alive to attack.`;
                 }
             } else if (!isActive) {
-                lockReason = `🔒 CANNOT ATTACK (Inactive > 5m: ${d.online})`;
-                lockToastMsg = `Target [${d.name}] is Inactive (>5m)! Must be Online or active within 5m to attack.`;
+                lockReason = `🔒 CANNOT ATTACK (Inactive > ${effectiveLimit}m: ${d.online})`;
+                lockToastMsg = `Target [${d.name}] is Inactive (>${effectiveLimit}m)! Must be Online or active within ${effectiveLimit}m to attack.`;
             } else {
                 lockReason = `🔒 CANNOT ATTACK (Criteria Not Met)`;
-                lockToastMsg = `Target [${d.name}] does not meet criteria (Out & Alive + Online/Active <= 5m).`;
+                lockToastMsg = `Target [${d.name}] does not meet criteria (Out & Alive + Online/Active <= ${effectiveLimit}m).`;
             }
 
             attackBtnHtml = `
@@ -1670,7 +1801,7 @@
 
         card.innerHTML = `
             <div class="stakeout-card-header">
-                <a href="https://www.torn.com/profiles.php?XID=${targetId}" target="_blank" class="stakeout-card-name" title="View Profile">
+                <a href="https://www.torn.com/profiles.php?XID=${targetId}" target="_blank" class="stakeout-card-name ${isStricken ? 'name-stricken' : ''}" title="View Profile">
                     <span class="stakeout-dot ${dotClass}" title="Status: ${d.online}"></span>
                     <span>${d.name} [${targetId}]</span>
                     ${d.level > 0 ? `<span style="font-size: 10px; color: #94a3b8;">(Lvl ${d.level})</span>` : ''}
@@ -1678,8 +1809,27 @@
                 <button class="stakeout-btn-icon" data-del="${targetId}" title="Remove Target">✕</button>
             </div>
 
+            <div class="stakeout-card-subbar">
+                <label class="stakeout-checkbox-label" title="Mark this target as Stricken / Hit (silences alarms)">
+                    <input type="checkbox" data-target-stricken="${targetId}" ${isStricken ? 'checked' : ''} />
+                    <span style="font-weight: 700; color: ${isStricken ? '#f87171' : '#94a3b8'};">${isStricken ? '🎯 STRICKEN' : 'Stricken'}</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 4px;" title="Configure inactive threshold for this target">
+                    <span style="color: #64748b; font-size: 10px;">⏱️ Inactive:</span>
+                    <select class="stakeout-target-limit-select" data-target-limit="${targetId}">
+                        <option value="0" ${customLimit === 0 ? 'selected' : ''}>Global (${config.activeThresholdMin || 5}m)</option>
+                        <option value="2" ${customLimit === 2 ? 'selected' : ''}>2 Mins</option>
+                        <option value="5" ${customLimit === 5 ? 'selected' : ''}>5 Mins</option>
+                        <option value="10" ${customLimit === 10 ? 'selected' : ''}>10 Mins</option>
+                        <option value="15" ${customLimit === 15 ? 'selected' : ''}>15 Mins</option>
+                        <option value="30" ${customLimit === 30 ? 'selected' : ''}>30 Mins</option>
+                        <option value="60" ${customLimit === 60 ? 'selected' : ''}>60 Mins</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="stakeout-card-badges">
-                ${statusBadge}
+                <div>${statusBadge}</div>
                 <span style="color: #cbd5e1;">${d.lastActionRel || d.online}</span>
             </div>
 
@@ -1690,6 +1840,30 @@
 
             ${attackBtnHtml}
         `;
+
+        const strickenBox = card.querySelector(`[data-target-stricken="${targetId}"]`);
+        if (strickenBox) {
+            strickenBox.onchange = (e) => {
+                const checked = e.target.checked;
+                setTargetStricken(targetId, checked);
+                showStakeoutToast(checked ? `🎯 Target [${d.name}] marked as STRICKEN.` : `Target [${d.name}] unmarked from Stricken.`);
+                checkAndAdjustPollingInterval();
+                updateTargetCardUI(targetId);
+                updateRadarBadge();
+            };
+        }
+
+        const limitSelect = card.querySelector(`[data-target-limit="${targetId}"]`);
+        if (limitSelect) {
+            limitSelect.onchange = (e) => {
+                const val = parseInt(e.target.value, 10);
+                setTargetInactiveLimit(targetId, val);
+                const effective = getTargetInactiveLimit(targetId);
+                showStakeoutToast(`⏱️ Inactive limit for [${d.name}] set to ${effective} mins.`);
+                updateTargetCardUI(targetId);
+                updateRadarBadge();
+            };
+        }
 
         const lockedBtn = card.querySelector(`[data-attack-locked="${targetId}"]`);
         if (lockedBtn && lockToastMsg) {
@@ -1707,7 +1881,10 @@
     function removeTarget(targetId) {
         watchlist = watchlist.filter(id => id !== targetId);
         delete targetsCache[targetId];
+        delete targetMeta[targetId];
         saveWatchlist();
+        saveTargetMeta();
+        checkAndAdjustPollingInterval();
         renderRadarUI();
         updateProfilePageButton();
     }
@@ -1781,70 +1958,160 @@
 
     // --- 10. POLLING SCHEDULER & RUNTIME ---
     let pollIndex = 0;
-    async function pollSingleTarget(targetId) {
-        const fresh = await fetchTargetTelemetry(targetId);
-        if (fresh) evaluateTargetTriggers(targetId, fresh);
+    let isPolling = false;
+    let currentPollingIntervalMs = (config.pollingInterval || 5) * 1000;
+    let backgroundTicker = null;
+
+    function updateDockFooterRate() {
+        const el = document.getElementById('stakeout-footer-rate');
+        if (!el) return;
+        const callRate = getApiCallRate();
+        const isRapid = currentPollingIntervalMs === 1000;
+        el.innerHTML = `Rate: ${callRate}/90 cpm • Poll: ${isRapid ? '<b style="color: #f59e0b; animation: stakeout-glow-pulse 1s infinite;">1s ⚡ (RAPID)</b>' : `${config.pollingInterval || 5}s`}`;
     }
 
-    async function pollNextWatchlistTarget() {
-        if (config.isPaused || watchlist.length === 0) return;
+    // Detect if any target is nearing hospital discharge (<= 60s)
+    function getRapidHospTarget() {
+        if (!config.rapidHospPolling || watchlist.length === 0) return null;
+        const nowSec = Math.floor(Date.now() / 1000);
+        let bestTarget = null;
+        let lowestRemaining = Infinity;
 
-        let rapidTargetId = null;
-        if (config.rapidHospPolling) {
-            const nowSec = Math.floor(Date.now() / 1000);
-            const thresholdSec = 300; // 5-minute pre-release rapid polling window
-            let lowestRemaining = Infinity;
+        // Priority 1: Un-stricken targets nearing hospital discharge (<= 60s)
+        for (const id of watchlist) {
+            if (isTargetStricken(id)) continue;
+            const info = targetsCache[id]?.data;
+            if (info && info.state === 'Hospital') {
+                const rem = info.until - nowSec;
+                if (rem <= 60 && rem >= -60 && rem < lowestRemaining) {
+                    lowestRemaining = rem;
+                    bestTarget = id;
+                }
+            }
+        }
+
+        // Priority 2: If no un-stricken targets qualify, allow stricken targets
+        if (!bestTarget) {
             for (const id of watchlist) {
                 const info = targetsCache[id]?.data;
-                if (info && info.state === 'Hospital' && info.until > nowSec) {
+                if (info && info.state === 'Hospital') {
                     const rem = info.until - nowSec;
-                    if (rem <= thresholdSec && rem < lowestRemaining) {
+                    if (rem <= 60 && rem >= -60 && rem < lowestRemaining) {
                         lowestRemaining = rem;
-                        rapidTargetId = id;
+                        bestTarget = id;
                     }
                 }
             }
         }
 
-        const targetToPoll = rapidTargetId || watchlist[pollIndex % watchlist.length];
-        pollIndex = (pollIndex + 1) % watchlist.length;
+        return bestTarget;
+    }
 
-        await pollSingleTarget(targetToPoll);
+    function checkAndAdjustPollingInterval() {
+        if (!backgroundTicker) return;
+        const rapidTarget = getRapidHospTarget();
+        const desiredIntervalMs = rapidTarget ? 1000 : (config.pollingInterval || 5) * 1000;
+
+        if (desiredIntervalMs !== currentPollingIntervalMs) {
+            const wasSlower = currentPollingIntervalMs > desiredIntervalMs;
+            currentPollingIntervalMs = desiredIntervalMs;
+            backgroundTicker.setIntervalMs(desiredIntervalMs);
+            updateDockFooterRate();
+            if (wasSlower && desiredIntervalMs === 1000 && rapidTarget) {
+                // Immediate fetch on entering 1-second rapid hospital mode
+                pollSingleTarget(rapidTarget);
+            }
+        }
+    }
+
+    async function pollSingleTarget(targetId) {
+        const fresh = await fetchTargetTelemetry(targetId);
+        if (fresh) {
+            evaluateTargetTriggers(targetId, fresh);
+            checkAndAdjustPollingInterval();
+        }
+    }
+
+    async function pollNextWatchlistTarget() {
+        if (config.isPaused || watchlist.length === 0 || isPolling) return;
+        isPolling = true;
+
+        try {
+            const rapidTargetId = getRapidHospTarget();
+            const targetToPoll = rapidTargetId || watchlist[pollIndex % watchlist.length];
+
+            // Only advance round-robin index when not actively rapid-sniping a target
+            if (!rapidTargetId) {
+                pollIndex = (pollIndex + 1) % watchlist.length;
+            }
+
+            await pollSingleTarget(targetToPoll);
+        } finally {
+            isPolling = false;
+            checkAndAdjustPollingInterval();
+        }
     }
 
     // --- 10.1 UNTHROTTLED BACKGROUND TICKER (Web Worker) ---
     // Browsers aggressively throttle window.setInterval (down to 1 call/min) when tabs are unfocused.
-    // A Blob Web Worker runs on an unthrottled worker thread, ensuring the 5-second API polling
+    // A Blob Web Worker runs on an unthrottled worker thread, ensuring the 1s/5s API polling
     // continues uninterrupted even when Torn is minimized or in the background.
-    function createBackgroundTicker(intervalMs, callback) {
+    function createBackgroundTicker(initialIntervalMs, callback) {
+        let currentInterval = initialIntervalMs;
+        let workerRef = null;
+        let fallbackTimer = null;
+
         try {
             const blobCode = `
                 let timer = null;
+                let interval = ${initialIntervalMs};
                 self.onmessage = function(e) {
-                    if (e.data === 'start') {
+                    const data = e.data;
+                    if (data === 'start') {
                         if (timer) clearInterval(timer);
-                        timer = setInterval(function() { self.postMessage('tick'); }, ${intervalMs});
-                    } else if (e.data === 'stop') {
+                        timer = setInterval(function() { self.postMessage('tick'); }, interval);
+                    } else if (data === 'stop') {
                         if (timer) clearInterval(timer);
                         timer = null;
+                    } else if (typeof data === 'object' && data.type === 'setInterval') {
+                        interval = data.intervalMs;
+                        if (timer) {
+                            clearInterval(timer);
+                            timer = setInterval(function() { self.postMessage('tick'); }, interval);
+                        }
                     }
                 };
             `;
             const blob = new Blob([blobCode], { type: 'application/javascript' });
-            const worker = new Worker(URL.createObjectURL(blob));
-            worker.onmessage = function (e) {
+            workerRef = new Worker(URL.createObjectURL(blob));
+            workerRef.onmessage = function (e) {
                 if (e.data === 'tick') callback();
             };
-            worker.postMessage('start');
-            return worker;
+            workerRef.postMessage('start');
         } catch (e) {
             console.warn('[Stakeout] Web Worker fallback to setInterval:', e);
-            const intervalId = setInterval(callback, intervalMs);
-            return {
-                terminate: () => clearInterval(intervalId),
-                postMessage: () => {}
-            };
+            fallbackTimer = setInterval(callback, initialIntervalMs);
         }
+
+        return {
+            setIntervalMs: (newIntervalMs) => {
+                if (newIntervalMs === currentInterval) return;
+                currentInterval = newIntervalMs;
+                if (workerRef) {
+                    workerRef.postMessage({ type: 'setInterval', intervalMs: newIntervalMs });
+                } else if (fallbackTimer) {
+                    clearInterval(fallbackTimer);
+                    fallbackTimer = setInterval(callback, newIntervalMs);
+                }
+            },
+            terminate: () => {
+                if (workerRef) {
+                    workerRef.postMessage('stop');
+                    workerRef.terminate();
+                }
+                if (fallbackTimer) clearInterval(fallbackTimer);
+            }
+        };
     }
 
     function boot() {
@@ -1856,8 +2123,10 @@
         renderRadarUI();
         updateProfilePageButton();
 
-        // Safe 1-second ticker for target UI and countdowns
+        // Safe 1-second ticker for target UI, countdowns, and dynamic poll frequency
         setInterval(() => {
+            checkAndAdjustPollingInterval();
+            updateDockFooterRate();
             if (config.isMinimized || watchlist.length === 0) return;
             watchlist.forEach(id => updateTargetCardUI(id));
         }, 1000);
@@ -1870,7 +2139,7 @@
         }, 2000);
 
         // Main unthrottled poller (Web Worker with fallback)
-        createBackgroundTicker((config.pollingInterval || 5) * 1000, pollNextWatchlistTarget);
+        backgroundTicker = createBackgroundTicker(currentPollingIntervalMs, pollNextWatchlistTarget);
 
         // Initial fetch for all targets
         if (watchlist.length > 0) {

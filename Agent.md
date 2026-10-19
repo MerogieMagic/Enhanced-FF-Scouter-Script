@@ -2882,3 +2882,74 @@ Extracted directly via Torn API stock market endpoints:
     - Script syntax checked via `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
   - **Date & Time**: 2026-10-19 10:56:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 120
+- **Focus**: Radar Target Metadata Architecture (`torn_mercenary_stakeout.user.js` v1.11) — Per-Target Stricken Flag (Alarm Muting & Visual Dimming) and Dual-Layer Inactive Threshold Configuration (Global Settings + Per-Target Overrides).
+  - **User Directive**:
+    - "for each of the targets added, give an option to indicate if it is stricken or not, also give an option to configure the inactive limit eg. 5mins or 10mins etc"
+  - **Architectural Implementation**:
+    1. *Persistent Metadata Storage*:
+       - Added `targetMeta = getStorage('target_meta', {})` with `saveTargetMeta()`.
+       - Implemented accessor helpers `isTargetStricken(targetId)`, `setTargetStricken(targetId, isStricken)`, `getTargetInactiveLimit(targetId)`, and `setTargetInactiveLimit(targetId, mins)`.
+       - Automatically purges target metadata on removal inside `removeTarget(targetId)`.
+    2. *Per-Target "Stricken" State*:
+       - Added inline checkbox `<input type="checkbox" data-target-stricken="${targetId}">` on every card.
+       - Toggling Stricken dynamically applies `.stakeout-card.stricken` styling (dimmed card, red strikethrough name, `🎯 STRICKEN` badge).
+       - Completely suppresses sirens, synthesized audio alarms, persistent desktop notifications, and OS auto-focus companion calls for stricken targets.
+       - Excludes stricken targets from the minimized dock `• ⚡ X READY` counter so users are not misled by completed bounties.
+    3. *Configurable Inactive Limits (Global + Per-Target)*:
+       - Global setting in Radar Settings Panel (`⚙`): `#stakeout-inactive-select` dropdown with options for 2 Mins, 5 Mins (Default), 10 Mins, 15 Mins, 30 Mins, and 60 Mins.
+       - Per-target override dropdown on every target card subbar: `Global (Xm)`, `2 Mins`, `5 Mins`, `10 Mins`, `15 Mins`, `30 Mins`, and `60 Mins`.
+       - Re-engineered activity predicate to `isTargetActiveWithinLimit(snapshot, nowSec, targetId)`, evaluating target override if set, else global threshold.
+       - Attack buttons and locked rationale tooltips dynamically reflect the effective limit (e.g. `🔒 CANNOT ATTACK (Inactive > 10m: Offline)`).
+    4. *Reactive State Caching*:
+       - Expanded `stateKey` cache check to include `_${isStricken}_${effectiveLimit}`, ensuring instantaneous UI updates when settings or checkboxes are toggled.
+  - **Verification**:
+    - Syntax checked with `node --check` (exit code 0).
+  - **Date & Time**: 2026-10-19 11:06:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 121
+- **Focus**: Dynamic Hospital Discharge Sniping Engine (`torn_mercenary_stakeout.user.js` v1.12) — Automatic 1-Second Refresh Acceleration When Target Hospital Exit $\le 1$ Minute with Reversion to 5 Seconds.
+  - **User Directive**:
+    - "if the time to come out of hosptal for a target is 1min or less, increase frequency of refresh to 1 per second else can remain all other refresh frequency at 1 per 5s"
+  - **Architectural & Combat Mechanics Analysis**:
+    1. *API Budget & Rate Limit Safety*:
+       - Torn City enforces an API rate limit of 100 calls per minute (cpm); the script maintains a safety ceiling of 90 cpm.
+       - A 60-second burst at 1 call per second consumes exactly 60 API calls.
+       - Under normal conditions (5s polling), the radar consumes only 12 calls per minute.
+       - Accelerating to 1s during the final 60 seconds of hospitalization fits comfortably within the 90 cpm safe budget without risking API bans or throttling.
+    2. *Dynamic Web Worker Ticker*:
+       - Web browsers aggressively throttle `window.setInterval` (to 1 call/min) when tabs are unfocused or minimized.
+       - Upgraded the unthrottled Web Worker Blob ticker (`createBackgroundTicker`) to support runtime dynamic reconfiguration via `.setIntervalMs(newIntervalMs)`.
+       - Worker handles `{ type: 'setInterval', intervalMs: newMs }`, clearing and restarting the interval timer on its dedicated background thread without requiring page reloads or thread termination.
+    3. *Target Prioritization & Discharge Transition Handling*:
+       - Implemented `getRapidHospTarget()`:
+         - Inspects all watchlist targets for `state === 'Hospital'`.
+         - Evaluates `rem = info.until - nowSec`.
+         - Detects targets where `rem <= 60 && rem >= -60` (allowing up to 60s past scheduled `until` to account for Torn server discharge cron processing delays).
+         - Priority 1: Un-stricken targets nearing discharge are prioritized to maximize tactical bounty sniping.
+         - Priority 2: Stricken targets are supported as fallback if no active targets are near discharge.
+         - Selects the target with the lowest remaining hospital time.
+       - Pauses round-robin index advancement during rapid-sniping so the imminent target is polled every single second.
+    4. *Re-Entrancy Guard & Immediate Polling*:
+       - Added `isPolling` mutex to prevent concurrent overlapping async API requests during network latency spikes.
+       - When transitioning from 5s to 1s, the engine immediately dispatches a telemetry poll for the rapid target, avoiding any initial startup delay.
+       - Upon hospital discharge (Torn API confirms `state: 'Okay'`) or time extension $> 60$s, the engine automatically reverts `currentPollingIntervalMs` to 5000ms, restores normal 5-second round-robin polling, and triggers combat alarms if eligible.
+    5. *Live Radar UI Feedback*:
+       - Updated target card hospital pill to display an amber-pulsing `⚡ Hosp: MM:SS (1s RAPID)` badge with `.near-ready` card glow when remaining time $\le 60$s.
+       - Updated radar dock footer to dynamically display `Rate: X/90 cpm • Poll: 1s ⚡ (RAPID)` in glowing amber during rapid sniping, and `Poll: 5s` during normal mode.
+  - **Verification**:
+    - Automated unit test suite (`11/11 tests passed with 100% success`):
+      - Verified 5s default interval when hospital time $> 60$s or targets are Okay/Traveling.
+      - Verified instant 1s switch at exactly 60s remaining.
+      - Verified 1s interval persistence at 15s, 0s (Torn timer zero), and -10s (server cron lag).
+      - Verified instantaneous reversion to 5s upon discharge to `Okay`.
+      - Verified multi-target prioritization (lowest remaining time selected).
+      - Verified unstricken priority over stricken targets.
+      - Verified failsafe timeout at -61s.
+      - Verified Web Worker interval messaging.
+    - Validated script syntax with `node --check torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-19 11:14:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
