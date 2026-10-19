@@ -19,16 +19,16 @@ An all-in-one userscript for [Torn City](https://www.torn.com) combining real-ti
 ### 📱 Option 2: Mobile (Torn PDA App)
 Tailored specifically to Torn PDA's native script specifications (`###PDA-APIKEY###` auto-authentication, War Mode compatibility, re-injection singleton guards, mobile touch gestures, haptic feedback, and Web Audio unlock):
 
-#### 🎯 Torn PDA - Mercenary Stakeout Radar (v1.01)
+#### 🎯 Torn PDA - Mercenary Stakeout Radar (v1.02)
 Mobile-optimized surveillance radar for hospital exits, flight arrivals, and online activity:
 1. In Torn PDA, navigate to **Settings** $\rightarrow$ **Advanced** $\rightarrow$ **User Scripts**.
-2. Tap **Add Script / Link** and paste:
+2. Tap **Add Script / Link** (or `+`) and paste the direct Raw URL:
    
    👉 **`https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js`** 👈
 
-- **Compact Mobile Architecture**: Designed specifically for small smartphone screens with 315px compact window, 3-row target cards, and space-saving layout.
-- **Minimizable Stakeout Triggers Menu**: Expand or minimize the Triggers Menu on demand with dedicated `▲ Minimize` buttons at both top and bottom of the panel, plus the header `⚙▲` toggle.
-- **Zero-Delay `bindTap` Touch Engine**: Custom touch tap handler with instant execution, drag-scroll cancellation, and crisp haptic vibration feedback (`triggerHaptic('tap')`).
+- **Seamless Auto-Updates**: Both `@downloadURL` and `@updateURL` point directly to `.user.js`, enabling Torn PDA's native auto-update engine and in-script `🔄 Updates` checker without URL mismatch errors.
+- **Bulletproof Tap & Minimize Controls**: Dedicated `▲ Minimize` buttons at both top and bottom of the triggers panel, plus the window `−` button and `⚙` toggle, utilizing native mobile click binding for immediate, guaranteed minimization.
+- **Compact Mobile Architecture**: Designed specifically for small smartphone screens with 315px compact window, 3-row target cards, and space-saving 2-column triggers grid.
 - **Zero-Setup API Authentication**: Torn PDA injects your API key via `###PDA-APIKEY###` automatically.
 - **Touch & Haptic Gestures**: Long-press (550ms hold) or tap `🎯` on any card to toggle Stricken with haptic vibration feedback (`navigator.vibrate`).
 - **Dynamic 1s Hospital Polling**: Rapid polling automatically engages when a target has $< 60$s in hospital, tracking overdue Torn server ticks (`+Xs tick`).

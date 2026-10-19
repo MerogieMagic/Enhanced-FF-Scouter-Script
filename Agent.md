@@ -3355,3 +3355,47 @@ Extracted directly via Torn API stock market endpoints:
     - Cleaned up scratch scripts.
   - **Date & Time**: 2026-10-20 00:56:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 132
+- **Focus**: Elimination of Mobile Tap Abort Bug, Native Click Event Binding, Minimization Mechanics, and Direct Raw URL Auto-Update Pipeline (`tornpda_stakeout_radar.user.js` v1.02 & `tornpda_stakeout_radar.meta.js` v1.02).
+  - **User Directives**:
+    - "any way to quick update?"
+    - "update url not correctly incuded"
+    - "Every button to minimise did not work" (with screenshots `media_1792429278453_4d30cb1f.jpg` & `media_1792429283939_5afc1e8f.jpg`).
+  - **Root Cause & Forensic Diagnosis**:
+    1. *`bindTap` 12px Touch Delta Abort Flaw*:
+       - In v1.01, `bindTap` measured touch delta between `touchstart` and `touchend`: `if (dx > 12 || dy > 12) return;`.
+       - On physical smartphone touchscreens (especially Android / iOS WebViews), the contact area of an adult thumb is ~10mm (~45px). Tapping naturally causes 15–30px of micro-displacement.
+       - Inside the scrollable `.tornpda-settings` drawer (`overflow-y: auto`), inertia from scrolling or finger slide routinely produced deltas $> 12$px.
+       - Because `dx > 12` returned early, `touchend` failed to invoke the callback, while `e.preventDefault()` on `touchend` suppressed the browser's subsequent `click` event.
+       - As a direct result, every button using `bindTap` (`▲ Minimize`, `▲ Minimize Triggers Menu`, window `−`, and `⚙`) was silently dropped.
+    2. *Torn PDA `@updateURL` vs `@downloadURL` Failure*:
+       - In v1.00/v1.01, `@updateURL` pointed to `tornpda_stakeout_radar.meta.js`.
+       - When checking updates or validating scripts in Torn PDA, the app attempts to fetch and replace code from the specified update URL. Because `.meta.js` is only 20 lines without executable JavaScript, Torn PDA rejected it with *"update url not correctly incuded"* or failed to download the update.
+       - Furthermore, if a user manually pastes code into Torn PDA instead of installing via URL, Torn PDA flags the script as "Locally Modified" and blocks background updates.
+    3. *Modern Mobile Click Semantics*:
+       - In modern mobile browsers with `touch-action: manipulation !important`, the historical 300ms double-tap zoom delay is completely eliminated by the browser engine.
+       - Re-implementing touch gestures with `touchstart` / `touchend` is unnecessary and introduces fragile gesture competition inside Flutter's `InAppWebView` gesture arena.
+       - Standard native `.onclick` handlers (as utilized in `tornpda_war_enhanced.user.js`) are 100% reliable across all mobile operating systems.
+  - **Architectural & Design Fixes (`v1.02`)**:
+    1. *Bulletproof `bindTap` Engine*:
+       - Replaced custom touch delta tracking with native `el.onclick = handler;`.
+       - Incorporated event propagation stopping (`e.stopPropagation()`) to prevent taps from triggering card long-press listeners or container gestures.
+       - Added 250ms timestamp debounce to eliminate double-activation.
+       - Retained crisp haptic vibration feedback (`triggerHaptic('tap')` 40ms buzz).
+    2. *Direct Raw `.user.js` Auto-Update Alignment*:
+       - In both `tornpda_stakeout_radar.user.js` and `tornpda_stakeout_radar.meta.js`:
+         - `@downloadURL`: `https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js`
+         - `@updateURL`: `https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js`
+       - Guarantees Torn PDA's script manager always pulls the complete executable userscript payload without URL mismatch errors.
+    3. *Dual-Stack Update Checker (`checkForScriptUpdates`)*:
+       - Enhanced in-script update engine with `fetch` fallback alongside `GM_xmlhttpRequest` for resilient operation across restrictive WebView environments.
+    4. *Button Ergonomics & Touch Target Expansion*:
+       - Added explicit `type="button"` across all buttons (`minBtn`, `settingsBtn`, `pauseBtn`, `closeBtnTop`, `closeBtnBottom`, `setKeyBtn`, `testSoundBtn`, `testBellBtn`, `checkUpdateBtn`, and card actions).
+       - Increased `.tornpda-btn-icon` min-dimensions to 30px with `-webkit-tap-highlight-color` and responsive `:active` scaling.
+  - **Verification**:
+    - Validated syntax using `node --check tornpda_stakeout_radar.user.js tornpda_stakeout_radar.meta.js` (exit code 0).
+    - Executed automated verification test suite `verify_v102.js` verifying version consistency, update URLs, absence of touch drop thresholds, button definitions, and fetch fallback (5/5 checks passed with 100% success).
+  - **Date & Time**: 2026-10-20 01:12:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+

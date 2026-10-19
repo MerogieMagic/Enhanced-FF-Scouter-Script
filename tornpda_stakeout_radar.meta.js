@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.01
+// @version      1.02
 // @description  Torn PDA mobile-optimized stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, and instant alarms with 1-tap attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -15,5 +15,5 @@
 // @grant        GM_notification
 // @connect      raw.githubusercontent.com
 // @downloadURL  https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js
-// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.meta.js
+// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js
 // ==/UserScript==

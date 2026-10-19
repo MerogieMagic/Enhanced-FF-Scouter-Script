@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.01
+// @version      1.02
 // @description  Torn PDA mobile-optimized stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, and instant alarms with 1-tap attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -15,7 +15,7 @@
 // @grant        GM_notification
 // @connect      raw.githubusercontent.com
 // @downloadURL  https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js
-// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.meta.js
+// @updateURL    https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js
 // ==/UserScript==
 
 (function () {
@@ -30,7 +30,7 @@
     }
     window.__TORNPDA_STAKEOUT_RADAR_ACTIVE__ = true;
 
-    const SCRIPT_VERSION = "1.01";
+    const SCRIPT_VERSION = "1.02";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.meta.js";
 
@@ -84,38 +84,49 @@
     }
 
     function checkForScriptUpdates(manual = false) {
-        if (typeof GM_xmlhttpRequest !== 'function') {
-            if (manual) showStakeoutToast('⚠️ GM_xmlhttpRequest not available in this environment.');
-            return;
-        }
-
         if (manual) showStakeoutToast('🔄 Checking for Torn PDA Radar updates...');
 
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: `${SCRIPT_META_URL}?t=${Date.now()}`,
-            headers: { 'Cache-Control': 'no-cache' },
-            onload: function (response) {
-                if (response.status === 200) {
-                    const match = response.responseText.match(/@version\s+([\d.]+)/);
-                    if (match && match[1]) {
-                        const remoteVersion = match[1];
-                        if (compareVersions(remoteVersion, SCRIPT_VERSION) > 0) {
-                            showUpdateBanner(remoteVersion);
-                        } else if (manual) {
-                            showStakeoutToast(`✓ Radar is up to date (v${SCRIPT_VERSION}).`);
-                        }
+        const processMetaText = (text, status) => {
+            if (status === 200) {
+                const match = text.match(/@version\s+([\d.]+)/);
+                if (match && match[1]) {
+                    const remoteVersion = match[1];
+                    if (compareVersions(remoteVersion, SCRIPT_VERSION) > 0) {
+                        showUpdateBanner(remoteVersion);
                     } else if (manual) {
-                        showStakeoutToast('⚠️ Could not parse remote version header.');
+                        showStakeoutToast(`✓ Radar is up to date (v${SCRIPT_VERSION}).`);
                     }
                 } else if (manual) {
-                    showStakeoutToast(`⚠️ Update check failed (HTTP ${response.status}).`);
+                    showStakeoutToast('⚠️ Could not parse remote version header.');
                 }
-            },
-            onerror: function () {
-                if (manual) showStakeoutToast('⚠️ Network error checking for updates.');
+            } else if (manual) {
+                showStakeoutToast(`⚠️ Update check failed (HTTP ${status}).`);
             }
-        });
+        };
+
+        const targetUrl = `${SCRIPT_META_URL}?t=${Date.now()}`;
+
+        if (typeof GM_xmlhttpRequest === 'function') {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: targetUrl,
+                headers: { 'Cache-Control': 'no-cache' },
+                onload: function (response) {
+                    processMetaText(response.responseText, response.status);
+                },
+                onerror: function () {
+                    if (manual) showStakeoutToast('⚠️ Network error checking for updates.');
+                }
+            });
+        } else if (typeof fetch === 'function') {
+            fetch(targetUrl, { cache: 'no-cache' })
+                .then(res => res.text().then(text => processMetaText(text, res.status)))
+                .catch(() => {
+                    if (manual) showStakeoutToast('⚠️ Network error checking for updates.');
+                });
+        } else if (manual) {
+            showStakeoutToast('⚠️ No network method available for updates.');
+        }
     }
 
     function showUpdateBanner(remoteVersion) {
@@ -452,47 +463,23 @@
         } catch (e) {}
     }
 
-    // High-performance mobile touch tap binder with drag threshold and synthetic click debounce
+    // Bulletproof tap binder for mobile Torn PDA and desktop browsers
     function bindTap(el, callback) {
         if (!el || typeof callback !== 'function') return;
-        let touchStarted = false;
-        let startX = 0, startY = 0;
         let lastTrigger = 0;
 
-        const fire = (e) => {
+        const handler = (e) => {
             const now = Date.now();
-            if (now - lastTrigger < 350) return;
+            if (now - lastTrigger < 250) return;
             lastTrigger = now;
+            if (e && typeof e.stopPropagation === 'function') {
+                e.stopPropagation();
+            }
             triggerHaptic('tap');
             callback(e);
         };
 
-        el.addEventListener('touchstart', (e) => {
-            touchStarted = true;
-            if (e.touches && e.touches[0]) {
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-            }
-        }, { passive: true });
-
-        el.addEventListener('touchend', (e) => {
-            if (!touchStarted) return;
-            touchStarted = false;
-            if (e.changedTouches && e.changedTouches[0]) {
-                const dx = Math.abs(e.changedTouches[0].clientX - startX);
-                const dy = Math.abs(e.changedTouches[0].clientY - startY);
-                if (dx > 12 || dy > 12) return; // User was scrolling, not tapping
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            fire(e);
-        }, { passive: false });
-
-        el.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            fire(e);
-        });
+        el.onclick = handler;
     }
 
     function playStakeoutAlarm(type = 'okay') {
@@ -1144,13 +1131,15 @@
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            min-height: 28px !important;
-            min-width: 28px !important;
+            min-height: 30px !important;
+            min-width: 30px !important;
             touch-action: manipulation !important;
+            -webkit-tap-highlight-color: rgba(56, 189, 248, 0.2) !important;
+            user-select: none !important;
         }
         .tornpda-btn-icon:active {
             background: #334155 !important;
-            transform: scale(0.96) !important;
+            transform: scale(0.94) !important;
         }
         .tornpda-btn-icon.btn-active {
             border-color: #38bdf8 !important;
@@ -1514,7 +1503,8 @@
                 </div>
             `;
             const toggleEl = document.getElementById('tornpda-pill-toggle');
-            bindTap(toggleEl, () => {
+            bindTap(toggleEl, (e) => {
+                if (e && e.stopPropagation) e.stopPropagation();
                 config.isMinimized = false;
                 saveConfig();
                 renderRadarUI();
@@ -1536,19 +1526,19 @@
                         </span>
                     </div>
                     <div class="tornpda-header-actions">
-                        <button class="tornpda-btn-icon" id="tornpda-btn-pause" title="${config.isPaused ? 'Resume Scan' : 'Pause Scan'}">
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-pause" title="${config.isPaused ? 'Resume Scan' : 'Pause Scan'}">
                             ${config.isPaused ? '▶' : '⏸'}
                         </button>
-                        <button class="tornpda-btn-icon ${config.isTriggersMenuOpen ? 'btn-active' : ''}" id="tornpda-btn-settings" title="Toggle Triggers & Settings">
+                        <button type="button" class="tornpda-btn-icon ${config.isTriggersMenuOpen ? 'btn-active' : ''}" id="tornpda-btn-settings" title="Toggle Triggers & Settings">
                             ${config.isTriggersMenuOpen ? '⚙▲' : '⚙'}
                         </button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-minimize" title="Minimize to Pill">−</button>
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-minimize" title="Minimize to Pill">−</button>
                     </div>
                 </div>
 
                 <div class="tornpda-add-bar">
                     <input type="text" class="tornpda-input" id="tornpda-input-target" placeholder="Enter Player ID or Profile URL..." />
-                    <button class="tornpda-btn-primary" id="tornpda-btn-add">+ Add</button>
+                    <button type="button" class="tornpda-btn-primary" id="tornpda-btn-add">+ Add</button>
                 </div>
 
                 <div id="tornpda-settings-panel" class="tornpda-settings" style="display: ${config.isTriggersMenuOpen ? 'flex' : 'none'};">
@@ -1557,7 +1547,7 @@
                             <span>🎯</span>
                             <span>Mobile Stakeout Triggers</span>
                         </div>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-close-triggers-top" style="padding: 2px 7px; font-size: 10.5px; font-weight: 700; border-color: #38bdf8; color: #38bdf8;" title="Minimize Triggers Menu">▲ Minimize</button>
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-close-triggers-top" style="padding: 2px 8px; font-size: 11px; font-weight: 700; border-color: #38bdf8; color: #38bdf8;" title="Minimize Triggers Menu">▲ Minimize</button>
                     </div>
 
                     <div class="tornpda-settings-grid">
@@ -1643,16 +1633,16 @@
 
                     <div style="border-top: 1px solid #334155; margin-top: 2px; padding-top: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 10.5px;">
                         <span>🔑 API: <strong style="color: ${keyDetails.key ? '#38bdf8' : '#ef4444'}; font-family: monospace;">${maskApiKey(keyDetails.key)}</strong></span>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-set-key" style="padding: 2px 6px; font-size: 9.5px; border-color: #38bdf8; color: #38bdf8;" title="Change Key">Change Key</button>
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-set-key" style="padding: 2px 6px; font-size: 9.5px; border-color: #38bdf8; color: #38bdf8;" title="Change Key">Change Key</button>
                     </div>
 
                     <div style="display: flex; gap: 4px; margin-top: 2px;">
-                        <button class="tornpda-btn-icon" id="tornpda-btn-test-sound" style="flex: 1; padding: 3px; font-size: 10.5px;" title="Test Siren Alarm">🔊 Siren</button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-test-bell" style="flex: 1; padding: 3px; font-size: 10.5px; border-color: #f59e0b; color: #fbbf24;" title="Test Melodic Bell">🔔 Bell</button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-check-update" style="flex: 1; padding: 3px; font-size: 10.5px; border-color: #38bdf8; color: #38bdf8;" title="Check for Updates">🔄 Updates</button>
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-test-sound" style="flex: 1; padding: 3px; font-size: 10.5px;" title="Test Siren Alarm">🔊 Siren</button>
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-test-bell" style="flex: 1; padding: 3px; font-size: 10.5px; border-color: #f59e0b; color: #fbbf24;" title="Test Melodic Bell">🔔 Bell</button>
+                        <button type="button" class="tornpda-btn-icon" id="tornpda-btn-check-update" style="flex: 1; padding: 3px; font-size: 10.5px; border-color: #38bdf8; color: #38bdf8;" title="Check for Updates">🔄 Updates</button>
                     </div>
 
-                    <button class="tornpda-btn-icon" id="tornpda-btn-close-triggers-bottom" style="width: 100%; padding: 5px; font-size: 11px; font-weight: 700; border-color: #38bdf8; color: #38bdf8; margin-top: 4px;" title="Minimize Triggers Menu">▲ Minimize Triggers Menu</button>
+                    <button type="button" class="tornpda-btn-icon" id="tornpda-btn-close-triggers-bottom" style="width: 100%; padding: 6px; font-size: 11px; font-weight: 700; border-color: #38bdf8; color: #38bdf8; margin-top: 4px;" title="Minimize Triggers Menu">▲ Minimize Triggers Menu</button>
                 </div>
 
                 <div class="tornpda-body" id="tornpda-target-list">
@@ -1682,14 +1672,16 @@
 
     function setupSettingsListeners() {
         const minBtn = document.getElementById('tornpda-btn-minimize');
-        bindTap(minBtn, () => {
+        bindTap(minBtn, (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
             config.isMinimized = true;
             saveConfig();
             renderRadarUI();
         });
 
         const pauseBtn = document.getElementById('tornpda-btn-pause');
-        bindTap(pauseBtn, () => {
+        bindTap(pauseBtn, (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
             config.isPaused = !config.isPaused;
             saveConfig();
             renderRadarUI();
@@ -1697,7 +1689,8 @@
 
         const settingsPanel = document.getElementById('tornpda-settings-panel');
         const settingsBtn = document.getElementById('tornpda-btn-settings');
-        const toggleTriggers = () => {
+        const toggleTriggers = (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
             config.isTriggersMenuOpen = !config.isTriggersMenuOpen;
             saveConfig();
             if (settingsPanel) {
@@ -1712,7 +1705,8 @@
 
         const closeBtnTop = document.getElementById('tornpda-btn-close-triggers-top');
         const closeBtnBottom = document.getElementById('tornpda-btn-close-triggers-bottom');
-        const closeTriggers = () => {
+        const closeTriggers = (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
             config.isTriggersMenuOpen = false;
             saveConfig();
             if (settingsPanel) settingsPanel.style.display = 'none';
@@ -1899,8 +1893,8 @@
                 <div class="tornpda-card-header">
                     <span class="tornpda-card-name">Player [${targetId}]</span>
                     <div class="tornpda-card-actions">
-                        <button class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px;" title="Toggle Stricken">🎯</button>
-                        <button class="tornpda-btn-icon" data-del="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; color: #f87171;" title="Remove">✕</button>
+                        <button type="button" class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px;" title="Toggle Stricken">🎯</button>
+                        <button type="button" class="tornpda-btn-icon" data-del="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; color: #f87171;" title="Remove">✕</button>
                     </div>
                 </div>
                 <div style="font-size: 10.5px; color: #94a3b8;">Fetching live status...</div>
@@ -1974,8 +1968,8 @@
                     ${d.name} [${targetId}]
                 </a>
                 <div class="tornpda-card-actions">
-                    <button class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; ${isStricken ? 'border-color: #ef4444; color: #fca5a5;' : ''}" title="Tap to toggle Stricken">🎯</button>
-                    <button class="tornpda-btn-icon" data-del="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; color: #f87171;" title="Remove target">✕</button>
+                    <button type="button" class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; ${isStricken ? 'border-color: #ef4444; color: #fca5a5;' : ''}" title="Tap to toggle Stricken">🎯</button>
+                    <button type="button" class="tornpda-btn-icon" data-del="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; color: #f87171;" title="Remove target">✕</button>
                 </div>
             </div>
 
