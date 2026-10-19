@@ -3399,3 +3399,40 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-20 01:12:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 133
+- **Focus**: Elimination of Bulky Settings Drawer, Ultra-Lightweight Radar Architecture, Dual Header Minimization (Minus Button + Title Bar Tap), and Zero-Latency Mobile Touch Engine (`tornpda_stakeout_radar.user.js` v1.03 & `tornpda_stakeout_radar.meta.js` v1.03).
+  - **User Directive**:
+    - "Still not minimizing, maybe we can just remove the menu all together then, a lightweight version will do."
+  - **Context & Design Philosophy**:
+    1. *Root Elimination of Menu Bloat*:
+       - The mobile radar was burdened by a large "Mobile Stakeout Triggers" drawer containing 14 checkboxes, dropdowns, volume slider, API key buttons, and test sound sirens.
+       - On mobile phone screens, this drawer occluded active targets and created persistent UI trapping if the drawer remained open across sessions.
+       - Removing the entire settings drawer eliminates over 150 lines of bloated DOM templates, styles, and listeners.
+    2. *Sensible Preset Defaults*:
+       - All operational features (Ready combat alert, flight landing alert, full energy bell chime, drug cooldown bell chime, haptic vibration, 5s poll / 1s rapid hospital poll, and direct attack staging) operate seamlessly in the background with optimal presets without requiring an on-screen menu.
+       - Activity thresholds remain customizable on a granular, per-target basis via the dropdown directly on each target card (`2m`, `5m`, `10m`, `15m`, `30m`, `60m`).
+       - Power-user settings (API Key management, Radar toggle, Scan Pause/Resume, Updates) are registered cleanly via `GM_registerMenuCommand` in Torn PDA's native script options.
+    3. *Effortless Dual Header Minimization*:
+       - Users can now minimize the radar window into the compact floating pill (`[🎯 Radar (N) • ⚡ READY]`) by either:
+         a) Tapping the prominent `[−]` minus button in the header actions.
+         b) Tapping anywhere on the `[🎯 Stakeout Radar ● SCAN]` header title bar.
+       - Tapping the pill restores the full radar dock.
+    4. *Dual Mobile Touch Engine (`ontouchend` + `onclick`)*:
+       - In `bindTap(el, callback)`, added explicit `ontouchend` execution alongside `onclick` with a 250ms timestamp debounce.
+       - Eliminates any synthetic click delay on mobile touchscreens, executing the callback instantly when a user lifts their finger.
+  - **Architectural Overhaul (`v1.03`)**:
+    1. *Purged Settings Drawer & CSS*:
+       - Removed `#tornpda-settings-panel`, `.tornpda-settings`, `.tornpda-settings-head`, `.tornpda-settings-grid`, and `.tornpda-toggle-row`.
+       - Removed `isTriggersMenuOpen` from `DEFAULT_CONFIG` and purged it from `localStorage`.
+       - Replaced `setupSettingsListeners()` with lightweight `setupWindowListeners()`.
+    2. *Empty State Fallback*:
+       - When watchlist is empty and no API key is detected, renders a direct `[🔑 Set API Key]` button inside the empty state message.
+    3. *Expanded Menu Commands*:
+       - Added `⏸ Pause / Resume Target Scanning` to `GM_registerMenuCommand`.
+  - **Verification**:
+    - Validated syntax using `node --check tornpda_stakeout_radar.user.js tornpda_stakeout_radar.meta.js` (exit code 0).
+    - Executed automated test suite `verify_v103.js` verifying v1.03 version synchronization, direct `.user.js` update URLs, total elimination of settings panel/toggles, presence of dual header minimization (button + title), and dual touch binding (5/5 checks passed with 100% success).
+  - **Date & Time**: 2026-10-20 01:25:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
