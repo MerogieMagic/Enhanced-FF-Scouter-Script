@@ -2727,6 +2727,43 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-19 00:05:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 115
+- **Focus**: Strategic Battle Stat Intelligence — Deep Dive into the "0% Dexterity" Hank's Ratio Variant (Mathematical Modeling, Gym Operating Corridors, Combat Mechanics, and Tactical Pros & Cons).
+  - **User Directive**:
+    - "what about a hank's ratio variant where the dex is 0% pros and cons?"
+  - **Mathematical Permutations of 0% Dex Hank's Ratio**:
+    - **Mr. Isoyamas Condition**: $\text{Defense} \ge 1.25 \times \text{2nd Highest} \implies \text{Str} \le 80, \text{Spd} \le 80$ (per 100 Def).
+    - **Frontline Fitness Condition with $\text{Dex} = 0$**:
+      $$\text{Str} + \text{Spd} \ge 1.25 \times (\text{Def} + 0) = 1.25 \times 100 = \mathbf{125}$$
+    - **Key Shift from Canonical Hank's**:
+      - Canonical Hank's (`100:80:80:28`) requires $\text{Str} + \text{Spd} \ge 160$, forcing both secondaries to remain frozen at the 80 ceiling.
+      - 0% Dex drops the required offensive sum from $160$ down to $125$, creating a **35-point safety corridor** (a 28% buffer) over Frontline's lockout line.
+    
+    | 0% Dex Configuration | % Strength | % Defense | % Speed | % Dexterity | Frontline Ratio | FF Safety Buffer | Tactical Profile |
+    | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+    | **Canonical Hank (`100:80:80:28`)** | 27.8% | 34.7% | 27.8% | 9.7% | $1.2500$ | $+0.0$ pts ($0.0\%$) | Rigid, razor-thin gym lock margin |
+    | **0% Dex — Max Offense (`100:80:80:0`)** | 30.8% | 38.5% | 30.8% | 0.0% | $1.6000$ | $+35.0$ pts ($28.0\%$) | Immense $+670\text{M}$ gym buffer on a 5B build |
+    | **0% Dex — Max Defense (`100:62.5:62.5:0`)** | 27.8% | 44.4% | 27.8% | 0.0% | $1.2500$ | $+0.0$ pts ($0.0\%$) | "Super Fortress" Defense Tank |
+    | **0% Dex — Str-Biased (`100:80:50:0`)** | 34.8% | 43.5% | 21.7% | 0.0% | $1.3000$ | $+5.0$ pts ($4.0\%$) | Single-hit KO juggernaut |
+    | **0% Dex — Spd-Biased (`100:50:80:0`)** | 21.7% | 43.5% | 34.8% | 0.0% | $1.3000$ | $+5.0$ pts ($4.0\%$) | Anti-evasion precision striker |
+
+  - **Exhaustive Tactical Pros & Cons**:
+    - **Pros**:
+      1. *Immense Gym Operating Buffer*: Virtually impossible to accidentally lock Frontline Fitness. You can dump millions of energy into Defense without breaking the ratio.
+      2. *Asymmetric Secondary Freedom*: Unlocks the ability to bias Strength over Speed (or vice-versa) rather than keeping them strictly locked at 80/80.
+      3. *Extreme Defense Whore Synergy*: Defense scales to 38.5%–44.4% of total stats. Because Defense mitigates damage at a 14:1 ratio (vs 64:1 for Dex evasion), equal-stat opponents deal 0-1 damage.
+      4. *100% Specialist Gym Energy Utilization*: Zero energy wasted in George's (7.3 dots) maintaining a 4th stat. 100% of lifetime energy flows into 8.0 dot (Isoyamas) and 7.5 dot (Frontline) gyms.
+      5. *Immunity to Dexterity Debuffs*: Pepper Spray (-80% Dex) is rendered completely useless.
+    - **Cons**:
+      1. *Zero Evasion (100% Incoming Hit Rate)*: Every single opponent attack connects. You never dodge.
+      2. *Extreme Vulnerability to Defense Debuffs*: Tear Gas (-50% Def) and Concussion Grenades (-50% Def) connect 100% of the time and halve your sole defensive layer.
+      3. *Weakness to RW Weapon Bonuses & Stacking*: RW weapons with Pierce, Penetrate, Puncturing, or Eviscerate shred armor and bypass defense, easily taking down non-evasive targets during faction stacking.
+      4. *Rapid Armor Degradation*: Absorbing 100% of incoming hits rapidly exhausts armor durability, incurring heavy repair costs or leaving the player unarmored.
+      5. *Stat Enhancer (SE) & Transition Trap*: Cannot utilize Parachutes (+1% Dex); transitioning to a balanced build later is a massive "stat prison" requiring hundreds of thousands of energy in sub-optimal gyms.
+  - **Date & Time**: 2026-10-19 08:48:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 
 
