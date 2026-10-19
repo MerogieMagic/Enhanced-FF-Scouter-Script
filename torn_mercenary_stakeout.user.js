@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.14
+// @version      1.15
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.14";
+    const SCRIPT_VERSION = "1.15";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -290,6 +290,7 @@
         activeThresholdMin: 5,      // 5 minutes
         alertOnLanding: true,       // Alert on flight arrival (only if Out & Alive + Active)
         alertOnFullHp: false,       // Alert on 100% HP (only if Out & Alive + Active)
+        alertOnFullEnergy: true,    // Separate bell notification when your energy reaches 100% while waiting for hospital targets
         soundAlarm: true,
         alarmVolume: 1.0,           // 0.1 to 1.0 (10% to 100%)
         alarmSoundType: 'siren',    // 'siren' (loudest) | 'horn' | 'klaxon' | 'chime'
@@ -718,10 +719,45 @@
                     osc1.stop(t0 + n.d);
                     osc2.stop(t0 + n.d);
                 });
+            } else if (type === 'bell') {
+                // Golden Bell Chime (Energy Full Notification): 2-strike melodic bell chime (1318.5Hz [E6] -> 1046.5Hz [C6]) with golden shimmer decay
+                const masterGain = ctx.createGain();
+                masterGain.gain.setValueAtTime(0.85 * vol, ctx.currentTime);
+                masterGain.connect(ctx.destination);
+
+                const bellStrikes = [
+                    { f: 1318.51, start: 0, dur: 1.2 },    // High Ding (E6)
+                    { f: 1046.50, start: 0.22, dur: 1.5 }  // Resonant Dong (C6)
+                ];
+
+                bellStrikes.forEach(b => {
+                    const t0 = ctx.currentTime + b.start;
+                    const oscFund = ctx.createOscillator();
+                    const oscHarm = ctx.createOscillator();
+                    const g = ctx.createGain();
+
+                    oscFund.type = 'sine';
+                    oscHarm.type = 'triangle';
+                    oscFund.frequency.setValueAtTime(b.f, t0);
+                    oscHarm.frequency.setValueAtTime(b.f * 2.02, t0);
+
+                    g.gain.setValueAtTime(0.0001, t0);
+                    g.gain.linearRampToValueAtTime(0.7, t0 + 0.008);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t0 + b.dur);
+
+                    oscFund.connect(g);
+                    oscHarm.connect(g);
+                    g.connect(masterGain);
+
+                    oscFund.start(t0);
+                    oscHarm.start(t0);
+                    oscFund.stop(t0 + b.dur);
+                    oscHarm.stop(t0 + b.dur);
+                });
             }
         } catch (e) {
             console.error('[Stakeout] Audio error, falling back to PCM WAV:', e);
-            playPcmWavFallback(type === 'warning' ? 1046 : 880, 800, vol);
+            playPcmWavFallback(type === 'warning' ? 1046 : (type === 'bell' ? 1318 : 880), 800, vol);
         }
     }
 
@@ -761,6 +797,109 @@
                 }
             }
         } catch (e) {}
+    }
+
+    // --- 4.1 PLAYER ENERGY MONITOR & BELL NOTIFICATION ---
+    let lastEnergyAlertState = false;
+    let lastEnergyAlertTime = 0;
+
+    function getPlayerEnergyFromDom() {
+        try {
+            const el = document.getElementById('barEnergy') || document.querySelector('[id*="barEnergy"], [class*="bar-energy"], [data-bar="energy"]');
+            if (!el) return null;
+
+            // 1. Try aria attributes (aria-valuenow="150" aria-valuemax="150")
+            const ariaNow = el.getAttribute('aria-valuenow');
+            const ariaMax = el.getAttribute('aria-valuemax');
+            if (ariaNow !== null && ariaMax !== null) {
+                const curr = parseInt(ariaNow, 10);
+                const max = parseInt(ariaMax, 10);
+                if (!isNaN(curr) && !isNaN(max) && max > 0) {
+                    return { current: curr, maximum: max };
+                }
+            }
+
+            // 2. Try textContent format: "150/150" or "150 / 150"
+            const text = el.textContent || '';
+            const m = text.match(/(\d+)\s*\/\s*(\d+)/);
+            if (m) {
+                const curr = parseInt(m[1], 10);
+                const max = parseInt(m[2], 10);
+                if (!isNaN(curr) && !isNaN(max) && max > 0) {
+                    return { current: curr, maximum: max };
+                }
+            }
+
+            // 3. Fallback: inspect child value elements
+            const valEl = el.querySelector('[class*="value"], [class*="desc"], [class*="text"]');
+            if (valEl) {
+                const valText = valEl.textContent || '';
+                const vm = valText.match(/(\d+)\s*\/\s*(\d+)/);
+                if (vm) {
+                    const curr = parseInt(vm[1], 10);
+                    const max = parseInt(vm[2], 10);
+                    if (!isNaN(curr) && !isNaN(max) && max > 0) {
+                        return { current: curr, maximum: max };
+                    }
+                }
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function checkEnergyStatus() {
+        if (!config.alertOnFullEnergy) return;
+
+        // Check if there are active targets being staked out in hospital
+        const nowSec = Math.floor(Date.now() / 1000);
+        const hospitalTargets = watchlist
+            .filter(id => !isTargetStricken(id))
+            .map(id => targetsCache[id]?.data)
+            .filter(d => d && d.state === 'Hospital');
+
+        if (hospitalTargets.length === 0) {
+            // Not waiting on any active hospital targets
+            return;
+        }
+
+        const energy = getPlayerEnergyFromDom();
+        if (!energy || energy.maximum <= 0) return;
+
+        const isFull = energy.current >= energy.maximum;
+
+        if (isFull) {
+            const nowMs = Date.now();
+            // Alert if newly full, or repeat reminder after 10 minutes if still sitting at maximum
+            if (!lastEnergyAlertState || (nowMs - lastEnergyAlertTime > 10 * 60 * 1000)) {
+                lastEnergyAlertState = true;
+                lastEnergyAlertTime = nowMs;
+
+                // Find lowest remaining hospital time for contextual message
+                let lowestRemaining = Infinity;
+                let targetContextName = '';
+                hospitalTargets.forEach(t => {
+                    const rem = t.until > nowSec ? t.until - nowSec : 0;
+                    if (rem < lowestRemaining) {
+                        lowestRemaining = rem;
+                        targetContextName = t.name;
+                    }
+                });
+
+                const timeStr = formatCountdown(lowestRemaining);
+
+                playStakeoutAlarm('bell');
+
+                sendStakeoutNotification(
+                    `🔔 Energy is FULL (${energy.current}/${energy.maximum})!`,
+                    `Target [${targetContextName}] in Hosp (${timeStr}). Train off excess energy before discharge!`
+                );
+
+                showStakeoutToast(`🔔 Energy is FULL (${energy.current}/${energy.maximum})! Target [${targetContextName}] in Hosp (${timeStr}). Train off excess energy.`);
+            }
+        } else {
+            // Energy dropped below maximum (user trained or spent energy)
+            lastEnergyAlertState = false;
+        }
     }
 
     // --- 5. TORN API POLLER & TELEMETRY ---
@@ -1501,6 +1640,10 @@
                         <span>Alert on Full 100% HP</span>
                         <input type="checkbox" id="toggle-alert-fullhp" ${config.alertOnFullHp ? 'checked' : ''} />
                     </label>
+                    <label class="stakeout-toggle-row" title="Plays a melodic golden bell chime when your Energy reaches 100% while waiting for hospital targets, so you can train off energy without capping">
+                        <span>🔔 Energy Full Bell (Train Reminder)</span>
+                        <input type="checkbox" id="toggle-alert-fullenergy" ${config.alertOnFullEnergy ? 'checked' : ''} />
+                    </label>
                     <label class="stakeout-toggle-row">
                         <span>Audio Sound Alarm</span>
                         <input type="checkbox" id="toggle-sound-alarm" ${config.soundAlarm ? 'checked' : ''} />
@@ -1550,8 +1693,9 @@
                     </div>
 
                     <div style="display: flex; gap: 6px; margin-top: 4px;">
-                        <button class="stakeout-btn-icon" id="stakeout-btn-test-sound" style="flex: 1; padding: 5px;" title="Test Synthesized Alarm Sound">🔊 Test Sound</button>
-                        <button class="stakeout-btn-icon" id="stakeout-btn-check-update" style="flex: 1; padding: 5px; border-color: #38bdf8; color: #38bdf8;" title="Check GitHub for Script Updates">🔄 Check Updates</button>
+                        <button class="stakeout-btn-icon" id="stakeout-btn-test-sound" style="flex: 1; padding: 5px;" title="Test Synthesized Attack Alarm">🔊 Test Siren</button>
+                        <button class="stakeout-btn-icon" id="stakeout-btn-test-bell" style="flex: 1; padding: 5px; border-color: #f59e0b; color: #fbbf24;" title="Test Synthesized Golden Bell Chime">🔔 Test Bell</button>
+                        <button class="stakeout-btn-icon" id="stakeout-btn-check-update" style="flex: 1; padding: 5px; border-color: #38bdf8; color: #38bdf8;" title="Check GitHub for Script Updates">🔄 Updates</button>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 2px;">
                         <span>Radar v${SCRIPT_VERSION}</span>
@@ -1609,6 +1753,15 @@
         const tFullHp = document.getElementById('toggle-alert-fullhp');
         if (tFullHp) tFullHp.onchange = (e) => { config.alertOnFullHp = e.target.checked; saveConfig(); };
 
+        const tFullEnergy = document.getElementById('toggle-alert-fullenergy');
+        if (tFullEnergy) {
+            tFullEnergy.onchange = (e) => {
+                config.alertOnFullEnergy = e.target.checked;
+                saveConfig();
+                if (e.target.checked) playStakeoutAlarm('bell');
+            };
+        }
+
         const tSound = document.getElementById('toggle-sound-alarm');
         if (tSound) tSound.onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
 
@@ -1663,6 +1816,9 @@
 
         const testSoundBtn = document.getElementById('stakeout-btn-test-sound');
         if (testSoundBtn) testSoundBtn.onclick = () => playStakeoutAlarm('test');
+
+        const testBellBtn = document.getElementById('stakeout-btn-test-bell');
+        if (testBellBtn) testBellBtn.onclick = () => playStakeoutAlarm('bell');
 
         const checkUpdateBtn = document.getElementById('stakeout-btn-check-update');
         if (checkUpdateBtn) checkUpdateBtn.onclick = () => checkForScriptUpdates(true);
@@ -2184,6 +2340,7 @@
         setInterval(() => {
             checkAndAdjustPollingInterval();
             updateDockFooterRate();
+            checkEnergyStatus();
             if (config.isMinimized || watchlist.length === 0) return;
             watchlist.forEach(id => updateTargetCardUI(id));
         }, 1000);

@@ -3008,5 +3008,46 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-19 12:20:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 124
+- **Focus**: Full Energy Golden Bell Chime & Gym Training Discharge Notifier (`torn_mercenary_stakeout.user.js` v1.15) — Client-Side Zero-Quota Energy DOM Tracking, Procedural Golden Bell Chime Synthesis, and Hospital Countdown Context Telemetry.
+  - **User Directive**:
+    - "can we add a separate bell notification when energy is full while waiting for target to come out, so i can go train off a little bit of energy"
+  - **Combat & Tactical Resource Mechanics**:
+    1. *Mercenary Energy Management in Torn City*:
+       - Attacking a player costs 25 energy.
+       - A player's natural energy regenerates at 5 energy every 15 minutes (or 10 energy every 15 minutes with faction perks), eventually reaching 100% capacity (e.g. 150/150 or 250/250 with Donator/Subscriber).
+       - Sitting at full energy while waiting for hospital discharge (which could take 10 to 60+ minutes) wastes energy regeneration and gym training opportunities.
+       - If alerted immediately upon hitting 100% full energy, a player can quickly train off 25–100 energy in the Gym, retaining sufficient reserve to strike the target the moment they leave hospital.
+    2. *Zero-Quota Energy Telemetry Architecture*:
+       - To preserve the critical 90 API calls per minute budget entirely for target surveillance, player energy is extracted client-side directly from Torn's header DOM (`#barEnergy`).
+       - Implemented `getPlayerEnergyFromDom()` with a robust 3-tier fallback parser:
+         - Tier 1: Attributes `aria-valuenow` and `aria-valuemax` from `#barEnergy`.
+         - Tier 2: Text regex `(\d+)\s*\/\s*(\d+)` matching standard `150/150` formats.
+         - Tier 3: Child elements matching `[class*="value"], [class*="desc"], [class*="text"]`.
+       - Operates across all Torn City pages (`https://www.torn.com/*`) without consuming any API calls.
+    3. *Prerequisite & Edge-Triggered Alerting*:
+       - Implemented `checkEnergyStatus()` running in the safe 1-second interval loop.
+       - Hospital Target Check: Only triggers if there is at least one active, non-stricken target currently in hospital (`state === 'Hospital'`). If no targets are in hospital or all targets are stricken, the bell remains silent to prevent nuisance alarms during everyday gameplay.
+       - Edge-Triggering (`lastEnergyAlertState`): Fires once when energy first reaches 100% capacity (`current >= maximum`).
+       - Anti-Spam & 10-Minute Reminder: If the player remains capped at 100% energy, a reminder fires after 10 minutes (`nowMs - lastEnergyAlertTime > 10 * 60 * 1000`).
+       - Automatic Reset: As soon as energy drops below maximum (e.g. user trains in the gym), `lastEnergyAlertState` immediately resets to `false`, priming the radar to alert again the next time energy caps out.
+    4. *Melodic Golden Bell Chime Synthesis*:
+       - Synthesized an unmistakable, pleasant golden bell chime (`type === 'bell'`) using Web Audio API:
+         - Dual strikes: High "Ding" (E6 1318.51Hz, 1.2s decay) followed by resonant "Dong" (C6 1046.50Hz, 1.5s decay).
+         - High harmonic depth: Pure sine fundamental paired with triangle overtones at $2.02\times$ harmonic frequency.
+         - Instant attack (8ms) and realistic exponential metallic decay.
+         - Completely distinct from the harsh saw/square attack sirens and klaxons used for combat target availability.
+         - Includes PCM WAV data URI fallback (1318Hz chime) if Web Audio context is suspended in background tabs.
+    5. *Contextual Notifications & Radar Controls*:
+       - Notification & Toast: Computes the target with the lowest remaining hospital time and informs the player:
+         - `🔔 Energy is FULL (150/150)! Target [PlayerName] in Hosp (12:34). Train off excess energy before discharge!`
+       - Settings Panel (`⚙`): Added `🔔 Energy Full Bell (Train Reminder)` toggle checkbox (default `true`) with immediate sound preview on activation.
+       - Preview Control: Added dedicated `🔔 Test Bell` preview button alongside `🔊 Test Siren` and `🔄 Updates` in the settings drawer.
+  - **Verification**:
+    - Automated unit tests covering 7 state transitions (fresh full energy, edge debounce, 10m reminder, gym drain reset, refilling re-trigger, zero-target suppression) passed with 100% success.
+    - Script and meta syntax verified with `node --check torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-19 14:10:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
 
 
