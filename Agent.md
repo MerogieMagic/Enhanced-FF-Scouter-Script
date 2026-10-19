@@ -2953,3 +2953,28 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-19 11:14:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 122
+- **Focus**: Left-Side Screen Re-Positioning & Dynamic Dock Anchor Architecture (`torn_mercenary_stakeout.user.js` v1.13) — Relocating Radar Dock to Bottom-Left to Prevent Torn Native Chat & Panel Overlaps.
+  - **User Directive**:
+    - "can we move the stakeout radar to the left side please"
+  - **Architectural & UI Implementation**:
+    1. *Screen Layout & Ergonomics Analysis*:
+       - In Torn City, player PM chats, Trade chat tabs, Faction chat tabs, and browser extensions (Torn Tools) dock in the bottom-right corner.
+       - Positioning the radar at `bottom: 20px; right: 20px` created visual conflicts and blocked access to incoming chat tabs.
+       - Moving the radar to the bottom-left (`bottom: 20px; left: 20px`) clears the entire bottom-right corridor for Torn's native communications.
+    2. *Dock & Toast Positioning*:
+       - Re-engineered `#torn-mercenary-dock` CSS: defaulted to `left: 20px !important; right: auto !important;` with `.position-left` and `.position-right` class support.
+       - Re-engineered `#stakeout-toast` CSS: defaulted to `bottom: 75px; left: 20px; right: auto;` with matching position classes so toast notifications cleanly float above the radar dock.
+    3. *Dynamic Position Configuration*:
+       - Added `dockPosition: 'left'` to `DEFAULT_CONFIG`.
+       - Implemented `applyDockPosition()` to dynamically apply `.position-left` / `.position-right` to `dockRoot`.
+       - Added `📍 Dock Position` dropdown in the Radar Settings Panel (`⚙`) with options:
+         - `Left Side (Default)`
+         - `Right Side`
+       - Selecting an option immediately repositions the dock, saves the preference to `localStorage`, and displays a confirmation toast.
+  - **Verification**:
+    - Script syntax validated with `node --check torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-19 11:56:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+

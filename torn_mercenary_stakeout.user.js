@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.12
+// @version      1.13
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.12";
+    const SCRIPT_VERSION = "1.13";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -37,6 +37,7 @@
 
             const toast = document.createElement('div');
             toast.id = 'stakeout-toast';
+            toast.className = (typeof config === 'object' && config.dockPosition === 'right') ? 'position-right' : 'position-left';
             toast.innerHTML = `
                 <span>${message}</span>
                 <span id="stakeout-toast-close" style="cursor: pointer; margin-left: 8px; font-weight: bold; font-size: 16px; color: #94a3b8;">×</span>
@@ -297,7 +298,8 @@
         rapidHospPolling: true,     // Dynamically increase to 1s polling when target hospital discharge <= 1 min (otherwise 5s)
         pollingInterval: 5, // seconds
         isPaused: false,
-        isMinimized: false
+        isMinimized: false,
+        dockPosition: 'left' // 'left' (default) | 'right'
     };
 
     let config = Object.assign({}, DEFAULT_CONFIG, getStorage('config', {}));
@@ -924,10 +926,21 @@
         #torn-stakeout-dock {
             position: fixed !important;
             bottom: 20px !important;
-            right: 20px !important;
+            left: 20px !important;
+            right: auto !important;
             z-index: 9999999 !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
             user-select: none;
+        }
+        #torn-mercenary-dock.position-left,
+        #torn-stakeout-dock.position-left {
+            left: 20px !important;
+            right: auto !important;
+        }
+        #torn-mercenary-dock.position-right,
+        #torn-stakeout-dock.position-right {
+            right: 20px !important;
+            left: auto !important;
         }
 
         .stakeout-pill {
@@ -1362,7 +1375,8 @@
         #stakeout-toast {
             position: fixed;
             bottom: 75px;
-            right: 20px;
+            left: 20px;
+            right: auto;
             background: #0f172a;
             border: 1px solid #38bdf8;
             color: #f8fafc;
@@ -1377,6 +1391,14 @@
             gap: 10px;
             animation: stakeoutToastFadeIn 0.2s ease-out;
         }
+        #stakeout-toast.position-left {
+            left: 20px;
+            right: auto;
+        }
+        #stakeout-toast.position-right {
+            right: 20px;
+            left: auto;
+        }
         @keyframes stakeoutToastFadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -1386,6 +1408,13 @@
     // --- 8. UI BUILDER & DOCK ---
     let dockRoot = null;
 
+    function applyDockPosition() {
+        if (!dockRoot) return;
+        const isLeft = (config.dockPosition || 'left') === 'left';
+        dockRoot.classList.remove('position-left', 'position-right');
+        dockRoot.classList.add(isLeft ? 'position-left' : 'position-right');
+    }
+
     function renderRadarUI() {
         if (!document.body) return;
 
@@ -1394,6 +1423,7 @@
             dockRoot.id = 'torn-mercenary-dock';
             document.body.appendChild(dockRoot);
         }
+        applyDockPosition();
 
         const nowSec = Math.floor(Date.now() / 1000);
         const readyCount = watchlist.filter(id => {
@@ -1498,6 +1528,13 @@
                     <label class="stakeout-toggle-row" title="Pings local companion bridge on 127.0.0.1:8766 to bring browser window to the front over other apps">
                         <span>⚡ OS Auto-Focus (Companion Bridge)</span>
                         <input type="checkbox" id="toggle-os-autofocus" ${config.osAutoFocus ? 'checked' : ''} />
+                    </label>
+                    <label class="stakeout-toggle-row" title="Screen placement for the Radar dock (Left side keeps right side clear for Torn chats)">
+                        <span>📍 Dock Position</span>
+                        <select id="stakeout-position-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                            <option value="left" ${(config.dockPosition || 'left') === 'left' ? 'selected' : ''}>Left Side (Default)</option>
+                            <option value="right" ${(config.dockPosition || 'left') === 'right' ? 'selected' : ''}>Right Side</option>
+                        </select>
                     </label>
 
                     <div style="border-top: 1px solid #334155; margin-top: 4px; padding-top: 6px;">
@@ -1611,6 +1648,16 @@
             tOsFocus.onchange = (e) => {
                 config.osAutoFocus = e.target.checked;
                 saveConfig();
+            };
+        }
+
+        const posSelect = document.getElementById('stakeout-position-select');
+        if (posSelect) {
+            posSelect.onchange = (e) => {
+                config.dockPosition = e.target.value;
+                saveConfig();
+                applyDockPosition();
+                showStakeoutToast(`📍 Radar moved to ${config.dockPosition === 'left' ? 'Left' : 'Right'} side.`);
             };
         }
 
