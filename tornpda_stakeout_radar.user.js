@@ -133,18 +133,26 @@
         `;
         document.body.appendChild(banner);
 
-        document.getElementById('tornpda-stakeout-btn-install-update').onclick = () => {
+        const installBtn = document.getElementById('tornpda-stakeout-btn-install-update');
+        bindTap(installBtn, () => {
             if (typeof GM_openInTab === 'function') {
                 GM_openInTab(SCRIPT_RAW_URL, { active: true });
             } else {
                 window.open(SCRIPT_RAW_URL, '_blank');
             }
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(SCRIPT_RAW_URL);
+                    showStakeoutToast('📋 Script URL copied to clipboard!');
+                }
+            } catch (e) {}
             banner.remove();
-        };
+        });
 
-        document.getElementById('tornpda-stakeout-btn-dismiss-update').onclick = () => {
+        const dismissBtn = document.getElementById('tornpda-stakeout-btn-dismiss-update');
+        bindTap(dismissBtn, () => {
             banner.remove();
-        };
+        });
     }
 
     // Auto-check updates once every 24 hours
