@@ -3094,6 +3094,59 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-19 15:38:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
-
-
-
+#### Session 126
+- **Focus**: Dedicated Personal Vitality & Cooldowns Feature Box, Triple Cooldown Alerts & Melodic Chimes (`torn_mercenary_stakeout.user.js` v1.17) — Standalone Energy Bar, Live Drug / Medical / Booster Timers, 60-Second Throttled API Sync, Edge-Triggered Alerts, and Audio Previews.
+  - **User Directive**:
+    - "infact, i want to make the alerts for energy a separate feature box in the same script, together with the radar script. Add on alerts when energy is maxed, when medical cool down, drug cool down, booster cool down is reached."
+  - **Architectural & Combat UX Implementation**:
+    1. *Dedicated Vitality & Cooldowns Feature Box (`#stakeout-cooldown-box`)*:
+       - Designed and docked a distinct, modular feature box inside `#torn-mercenary-dock` directly above the target search bar.
+       - Quick-collapse toggle (`▲` / `▼`) with preference saved to `config.isCooldownBoxCollapsed`.
+       - When collapsed, renders an ultra-compact single-line vitality pill: `⚡ 150E • 💊 Ready • 💉 Ready • 🍫 Ready`.
+       - Header features a manual sync button (`🔄`) to immediately refresh live cooldowns from Torn API on demand.
+    2. *Live Energy Telemetry & Visual Progress Bar*:
+       - Real-time client-side extraction from `#barEnergy` DOM (0 API quota used).
+       - Visual progress bar displays `150 / 150 (100%)` with dynamic color gradients (amber glow at 100% full, emerald green when charging).
+    3. *Triple Cooldowns Subsystem (Drug, Medical, Booster)*:
+       - 3-column responsive card layout:
+         - 💊 Drug Cooldown
+         - 💉 Medical Cooldown
+         - 🍫 Booster Cooldown
+       - Visual status styling:
+         - Active countdown (`03:45`, `01:12:30`) with amber border, glowing text, and remaining time.
+         - Ready state (`READY`) with emerald border, green glow, and instant readiness clarity.
+    4. *API Quota Conservation & Local Countdown Engine*:
+       - Torn API endpoint `https://api.torn.com/user/?selections=cooldowns` returns remaining seconds for `drug`, `medical`, and `booster`.
+       - Zero Quota Waste: The script calculates absolute expiration timestamps (`expiresAt = nowMs + sec * 1000`).
+       - Local 1-Second Ticker: Client-side interval ticks down remaining seconds locally every 1000ms with zero network requests.
+       - Background Sync: Runs automatically only once every 60 seconds (costing just 1 API call per minute, automatically throttled if call rate $\ge 90$ cpm).
+    5. *Edge-Triggered Alert Dispatching*:
+       - Initial Load Suppression: Any cooldown already at 0s on script boot sets `alertFired = true` to suppress noisy false alarms on page loads.
+       - Trigger Condition: Alerts only fire when an active cooldown ($> 0\text{s}$) counts down and reaches 0s.
+       - Automatic Reset: When a player consumes an item (cooldown becomes $> 0\text{s}$), `alertFired` is automatically reset to `false`.
+    6. *Melodic 2-Tone Cooldown Chime & Audio Synthesis*:
+       - Procedurally synthesized an upbeat, distinct 2-tone melodic chime (`type === 'cooldown'`):
+         - Tone 1: G5 (784.00 Hz) for 140ms.
+         - Tone 2: C6 (1046.50 Hz) for 350ms with exponential metallic decay.
+       - Distinct from both combat sirens/horns (saw/square waves) and the golden bell chime (E6/C6 chime).
+       - Fallback: Synthesized PCM WAV data URI for background tab playback.
+       - Dispatches persistent desktop notifications and in-dock toasts.
+    7. *Settings Drawer Controls & Sound Previews*:
+       - Individual toggles in Settings (`⚙`):
+         - `🔔 Alert on 100% Full Energy`
+         - `💊 Alert on Drug Cooldown Ready`
+         - `💉 Alert on Medical Cooldown Ready`
+         - `🍫 Alert on Booster Cooldown Ready`
+       - 4-Button sound test suite in settings drawer:
+         - `🔊 Siren` (Combat attack alert)
+         - `🔔 Bell` (Full energy golden bell)
+         - `💊 Cooldown` (2-tone cooldown ready chime)
+         - `🔄 Updates` (GitHub update checker)
+    8. *Lifecycle & Runtime Hooking*:
+       - Integrated `tickCooldownsAndEnergy()` into the safe 1-second interval loop in `boot()`.
+       - Registered initial API sync at 1200ms after boot and recurring background sync every 60000ms.
+  - **Verification**:
+    - Ran automated test suite verifying all 20 component integration checks with 100% pass rate.
+    - Script and meta syntax verified with `node --check torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-19 16:05:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
