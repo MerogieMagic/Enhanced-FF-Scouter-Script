@@ -3049,5 +3049,51 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-19 14:10:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
 
+#### Session 125
+- **Focus**: Right-Click Stricken Toggling, UI Simplification & Attack Destination Routing (`torn_mercenary_stakeout.user.js` v1.16) — Removing Stricken Checkboxes from Card Subbars, Non-Destructive Clean Target Names, Right-Click Context Actions, and Profile Page Double Confirmation Routing.
+  - **User Directive**:
+    - "make the stricken tag something i can apply via right click instead of always being an option in the main ui so that we can clean up and simplify the UI. Also, do not need to strike out the user name when stricken instead just have the stricke ntag will do."
+    - "Lastly add a toggle if the attack button should go to the attack page or the user profile page so that double confirmation of activity before hitting ."
+  - **Architectural & Combat UX Implementation**:
+    1. *Right-Click Context Action for Stricken Tagging*:
+       - Removed the bulky `<label class="stakeout-checkbox-label">` checkbox from the main card interface to dramatically declutter and streamline the target cards.
+       - Implemented `card.oncontextmenu` on the target card root element:
+         - Ignores right-clicks inside interactive form controls (`select`) or delete buttons (`[data-del]`).
+         - Suppresses default browser context menu (`e.preventDefault()`).
+         - Instantly flips target stricken state (`!isTargetStricken(targetId)`), updates `targetMeta`, triggers `setTargetStricken(targetId, newStricken)`, and persists to storage.
+         - Displays confirmation toast notification: `🎯 Target [Name] marked as STRICKEN.` / `Target [Name] unmarked from Stricken.`.
+         - Recalculates polling interval (`checkAndAdjustPollingInterval()`) and immediately refreshes card UI and dock badge.
+       - Added click listener on `data-toggle-stricken` badge: clicking the `🎯 STRICKEN` badge itself directly unmarks the target as well for maximum user convenience.
+    2. *Clean Target Name Presentation (No Line-Through Strike-Out)*:
+       - Removed `.stakeout-card-name.name-stricken` CSS containing `text-decoration: line-through !important`.
+       - Target name link remains permanently clean, intact, and readable regardless of whether the target is marked as stricken.
+       - Stricken status is communicated solely and cleanly via the `🎯 STRICKEN` badge in the status row, the card's subtle slate border/gradient, and the button's `🎯 (STRICKEN)` subtext.
+    3. *Cleaned-Up Card Subbar*:
+       - With the checkbox eliminated, `.stakeout-card-subbar` now cleanly presents `⏱️ Inactive Limit:` on the left and the inactive threshold `<select>` dropdown on the right, providing an uncluttered, modern layout.
+    4. *Attack Destination Routing (Profile vs. Direct Combat)*:
+       - Added `attackDestination: 'attack'` to `DEFAULT_CONFIG`.
+       - Settings Panel (`⚙`): Added `⚔️ Attack Button Target` dropdown with options:
+         - `⚔️ Direct Attack Page` (Default): links directly to `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`.
+         - `👤 Profile (Double Confirm)`: links to `https://www.torn.com/profiles.php?XID=${targetId}`.
+       - Tactical Value: In mercenary contracts and war stakeouts, opening the player profile allows the attacker to double-confirm recent activity, equipment, status icons, or faction buffs before locking into combat.
+       - Dynamic Button UI:
+         - When configured for Profile: Button displays `👤 VIEW PROFILE (CONFIRM & ATTACK)` with subtext `🔍 (DOUBLE CONFIRM)` and explanatory tooltip: *"Target [Name] is ready! Click to open profile for activity confirmation before attacking."*.
+         - When configured for Direct Attack: Button displays `⚔️ ATTACK TARGET` with subtext `⚡ (READY & ACTIVE!)` and tooltip: *"Click to attack target [Name]!"*.
+         - When Stricken: Subtext always clearly indicates `🎯 (STRICKEN)`.
+       - Added `config.attackDestination` into card `stateKey` cache check to ensure instantaneous visual and hyperlink re-renders across all cards when the setting is toggled.
+  - **Verification**:
+    - Ran automated test suite `verify_v116.js` (9/9 checks passed with 100% success):
+      - Verified version bump to 1.16 in script and meta.
+      - Verified `attackDestination` in `DEFAULT_CONFIG`.
+      - Verified settings dropdown HTML and listener binding.
+      - Verified `card.oncontextmenu` right-click handler.
+      - Verified `data-toggle-stricken` badge click unmark handler.
+      - Verified absence of `name-stricken` and `text-decoration: line-through`.
+      - Verified dynamic profile URL routing logic.
+    - Verified syntax with `node --check torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-19 15:38:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+
 
 

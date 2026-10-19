@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.15
+// @version      1.16
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.15";
+    const SCRIPT_VERSION = "1.16";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -291,6 +291,7 @@
         alertOnLanding: true,       // Alert on flight arrival (only if Out & Alive + Active)
         alertOnFullHp: false,       // Alert on 100% HP (only if Out & Alive + Active)
         alertOnFullEnergy: true,    // Separate bell notification when your energy reaches 100% while waiting for hospital targets
+        attackDestination: 'attack', // 'attack' (Direct sid=attack) | 'profile' (User Profile for double confirm)
         soundAlarm: true,
         alarmVolume: 1.0,           // 0.1 to 1.0 (10% to 100%)
         alarmSoundType: 'siren',    // 'siren' (loudest) | 'horn' | 'klaxon' | 'chime'
@@ -1412,10 +1413,6 @@
             border-color: #475569 !important;
             background: linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, #0f172a 100%) !important;
         }
-        .stakeout-card-name.name-stricken {
-            text-decoration: line-through !important;
-            color: #94a3b8 !important;
-        }
         .stakeout-card-subbar {
             display: flex;
             align-items: center;
@@ -1425,20 +1422,6 @@
             border: 1px solid #334155;
             border-radius: 4px;
             font-size: 10.5px;
-        }
-        .stakeout-checkbox-label {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            user-select: none;
-        }
-        .stakeout-checkbox-label input {
-            cursor: pointer;
-            width: 13px;
-            height: 13px;
-            margin: 0;
-            accent-color: #ef4444;
         }
         .stakeout-target-limit-select {
             background: #0f172a;
@@ -1457,6 +1440,7 @@
             background: rgba(239, 68, 68, 0.2);
             border: 1px solid #ef4444;
             color: #fca5a5;
+            cursor: pointer;
         }
 
         .stakeout-settings {
@@ -1621,6 +1605,13 @@
                         <span>⚔️ Alert on Attack Eligible (Out & Active)</span>
                         <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
                     </label>
+                    <label class="stakeout-toggle-row" title="Choose whether the green Attack button opens the direct combat attack page or the user profile page for double confirmation of activity before hitting">
+                        <span>⚔️ Attack Button Target</span>
+                        <select id="stakeout-attack-dest-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                            <option value="attack" ${(config.attackDestination || 'attack') === 'attack' ? 'selected' : ''}>⚔️ Direct Attack Page</option>
+                            <option value="profile" ${(config.attackDestination || 'attack') === 'profile' ? 'selected' : ''}>👤 Profile (Double Confirm)</option>
+                        </select>
+                    </label>
                     <label class="stakeout-toggle-row" title="Global threshold for activity (Online or last action within this many minutes)">
                         <span>⏱️ Inactive Limit (Default)</span>
                         <select id="stakeout-inactive-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
@@ -1737,6 +1728,18 @@
 
         const tOkay = document.getElementById('toggle-alert-okay');
         if (tOkay) tOkay.onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
+
+        const attackDestSelect = document.getElementById('stakeout-attack-dest-select');
+        if (attackDestSelect) {
+            attackDestSelect.onchange = (e) => {
+                config.attackDestination = e.target.value;
+                saveConfig();
+                showStakeoutToast(config.attackDestination === 'profile'
+                    ? '👤 Attack button set to open Target Profile (for double confirmation).'
+                    : '⚔️ Attack button set to open Direct Attack page.');
+                watchlist.forEach(id => updateTargetCardUI(id));
+            };
+        }
 
         const inactiveSelect = document.getElementById('stakeout-inactive-select');
         if (inactiveSelect) {
@@ -1918,7 +1921,7 @@
         const effectiveLimit = getTargetInactiveLimit(targetId);
 
         const isNearDischarge = d.state === 'Hospital' && remainingSec <= 60 && !isStricken;
-        const stateKey = `${d.state}_${formattedTime}_${overdueSec}_${d.hpCurr}_${d.hpMax}_${d.online}_${isStricken}_${effectiveLimit}_${isNearDischarge}`;
+        const stateKey = `${d.state}_${formattedTime}_${overdueSec}_${d.hpCurr}_${d.hpMax}_${d.online}_${isStricken}_${effectiveLimit}_${isNearDischarge}_${config.attackDestination}`;
         if (card.dataset.lastStateKey === stateKey) return;
         card.dataset.lastStateKey = stateKey;
 
@@ -1927,10 +1930,13 @@
         const isActive = isTargetActiveWithinLimit(d, nowSec, targetId);
 
         card.className = `stakeout-card ${isEligible ? 'ready' : (isNearDischarge ? 'near-ready' : '')} ${isStricken ? 'stricken' : ''}`;
+        card.title = isStricken
+            ? "Target is STRICKEN (Right-click card to unmark)"
+            : "Right-click card to toggle Stricken tag";
 
         let statusBadge = '';
         if (isStricken) {
-            statusBadge += `<span class="stakeout-status-pill stricken-pill" title="Target marked as Stricken / Hit">🎯 STRICKEN</span> `;
+            statusBadge += `<span class="stakeout-status-pill stricken-pill" data-toggle-stricken="${targetId}" style="cursor: pointer;" title="Target marked as STRICKEN (Click or right-click to unmark)">🎯 STRICKEN</span> `;
         }
         if (d.state === 'Hospital') {
             if (isNearDischarge) {
@@ -1967,10 +1973,27 @@
         let lockToastMsg = '';
 
         if (isEligible) {
+            const isProfileDest = (config.attackDestination || 'attack') === 'profile';
+            const destUrl = isProfileDest
+                ? `https://www.torn.com/profiles.php?XID=${targetId}`
+                : `https://www.torn.com/page.php?sid=attack&user2ID=${targetId}`;
+
+            const destLabel = isProfileDest
+                ? '👤 VIEW PROFILE (CONFIRM & ATTACK)'
+                : '⚔️ ATTACK TARGET';
+
+            const destSubtext = isStricken
+                ? '🎯 (STRICKEN)'
+                : (isProfileDest ? '🔍 (DOUBLE CONFIRM)' : '⚡ (READY & ACTIVE!)');
+
+            const destTitle = isProfileDest
+                ? `Target [${d.name}] is ready! Click to open profile for activity confirmation before attacking.`
+                : `Click to attack target [${d.name}]!`;
+
             attackBtnHtml = `
-                <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ${isStricken ? 'stricken-attack' : 'ready'}" title="Click to attack target [${d.name}]!">
-                    <span>⚔️ ATTACK TARGET</span>
-                    <span>${isStricken ? '🎯 (STRICKEN)' : '⚡ (READY & ACTIVE!)'}</span>
+                <a href="${destUrl}" target="_blank" class="stakeout-attack-btn ${isStricken ? 'stricken-attack' : 'ready'}" title="${destTitle}">
+                    <span>${destLabel}</span>
+                    <span>${destSubtext}</span>
                 </a>
             `;
         } else {
@@ -2014,7 +2037,7 @@
 
         card.innerHTML = `
             <div class="stakeout-card-header">
-                <a href="https://www.torn.com/profiles.php?XID=${targetId}" target="_blank" class="stakeout-card-name ${isStricken ? 'name-stricken' : ''}" title="View Profile">
+                <a href="https://www.torn.com/profiles.php?XID=${targetId}" target="_blank" class="stakeout-card-name" title="View Profile">
                     <span class="stakeout-dot ${dotClass}" title="Status: ${d.online}"></span>
                     <span>${d.name} [${targetId}]</span>
                     ${d.level > 0 ? `<span style="font-size: 10px; color: #94a3b8;">(Lvl ${d.level})</span>` : ''}
@@ -2023,22 +2046,16 @@
             </div>
 
             <div class="stakeout-card-subbar">
-                <label class="stakeout-checkbox-label" title="Mark this target as Stricken / Hit (silences alarms)">
-                    <input type="checkbox" data-target-stricken="${targetId}" ${isStricken ? 'checked' : ''} />
-                    <span style="font-weight: 700; color: ${isStricken ? '#f87171' : '#94a3b8'};">${isStricken ? '🎯 STRICKEN' : 'Stricken'}</span>
-                </label>
-                <div style="display: flex; align-items: center; gap: 4px;" title="Configure inactive threshold for this target">
-                    <span style="color: #64748b; font-size: 10px;">⏱️ Inactive:</span>
-                    <select class="stakeout-target-limit-select" data-target-limit="${targetId}">
-                        <option value="0" ${customLimit === 0 ? 'selected' : ''}>Global (${config.activeThresholdMin || 5}m)</option>
-                        <option value="2" ${customLimit === 2 ? 'selected' : ''}>2 Mins</option>
-                        <option value="5" ${customLimit === 5 ? 'selected' : ''}>5 Mins</option>
-                        <option value="10" ${customLimit === 10 ? 'selected' : ''}>10 Mins</option>
-                        <option value="15" ${customLimit === 15 ? 'selected' : ''}>15 Mins</option>
-                        <option value="30" ${customLimit === 30 ? 'selected' : ''}>30 Mins</option>
-                        <option value="60" ${customLimit === 60 ? 'selected' : ''}>60 Mins</option>
-                    </select>
-                </div>
+                <span style="color: #64748b; font-size: 10px;">⏱️ Inactive Limit:</span>
+                <select class="stakeout-target-limit-select" data-target-limit="${targetId}" title="Configure inactive threshold for this target">
+                    <option value="0" ${customLimit === 0 ? 'selected' : ''}>Global (${config.activeThresholdMin || 5}m)</option>
+                    <option value="2" ${customLimit === 2 ? 'selected' : ''}>2 Mins</option>
+                    <option value="5" ${customLimit === 5 ? 'selected' : ''}>5 Mins</option>
+                    <option value="10" ${customLimit === 10 ? 'selected' : ''}>10 Mins</option>
+                    <option value="15" ${customLimit === 15 ? 'selected' : ''}>15 Mins</option>
+                    <option value="30" ${customLimit === 30 ? 'selected' : ''}>30 Mins</option>
+                    <option value="60" ${customLimit === 60 ? 'selected' : ''}>60 Mins</option>
+                </select>
             </div>
 
             <div class="stakeout-card-badges">
@@ -2054,12 +2071,25 @@
             ${attackBtnHtml}
         `;
 
-        const strickenBox = card.querySelector(`[data-target-stricken="${targetId}"]`);
-        if (strickenBox) {
-            strickenBox.onchange = (e) => {
-                const checked = e.target.checked;
-                setTargetStricken(targetId, checked);
-                showStakeoutToast(checked ? `🎯 Target [${d.name}] marked as STRICKEN.` : `Target [${d.name}] unmarked from Stricken.`);
+        // Right-click anywhere on the card to toggle Stricken tag
+        card.oncontextmenu = (e) => {
+            if (e.target.closest('select, [data-del]')) return;
+            e.preventDefault();
+            const newStricken = !isTargetStricken(targetId);
+            setTargetStricken(targetId, newStricken);
+            showStakeoutToast(newStricken ? `🎯 Target [${d.name}] marked as STRICKEN.` : `Target [${d.name}] unmarked from Stricken.`);
+            checkAndAdjustPollingInterval();
+            updateTargetCardUI(targetId);
+            updateRadarBadge();
+        };
+
+        // Clicking on the 🎯 STRICKEN badge unmarks it
+        const strickenBadge = card.querySelector(`[data-toggle-stricken="${targetId}"]`);
+        if (strickenBadge) {
+            strickenBadge.onclick = (e) => {
+                e.stopPropagation();
+                setTargetStricken(targetId, false);
+                showStakeoutToast(`Target [${d.name}] unmarked from Stricken.`);
                 checkAndAdjustPollingInterval();
                 updateTargetCardUI(targetId);
                 updateRadarBadge();
