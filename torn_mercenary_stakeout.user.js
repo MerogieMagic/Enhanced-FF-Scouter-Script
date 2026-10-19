@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.13
+// @version      1.14
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.13";
+    const SCRIPT_VERSION = "1.14";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -775,7 +775,7 @@
 
         try {
             recordApiCall();
-            const url = `https://api.torn.com/user/${targetId}?selections=profile,basic&key=${apiKey}&comment=StakeoutRadar`;
+            const url = `https://api.torn.com/user/${targetId}?selections=profile,basic&key=${apiKey}&timestamp=${Date.now()}&comment=StakeoutRadar`;
             const res = await fetch(url);
             if (!res.ok) return null;
             const data = await res.json();
@@ -1750,18 +1750,19 @@
         const d = info.data;
         const nowSec = Math.floor(Date.now() / 1000);
         const remainingSec = d.until > nowSec ? d.until - nowSec : 0;
+        const overdueSec = (d.state === 'Hospital' && d.until > 0 && nowSec >= d.until) ? (nowSec - d.until) : 0;
         const isOkay = d.state === 'Okay';
         const formattedTime = formatCountdown(remainingSec);
         const exactTooltip = remainingSec > 0
             ? `${Math.floor(remainingSec / 3600)}h ${Math.floor((remainingSec % 3600) / 60)}m ${remainingSec % 60}s`
-            : 'Ready';
+            : (overdueSec > 0 ? `Timer reached 0 (+${overdueSec}s). Awaiting Torn server cron tick release.` : 'Ready');
 
         const isStricken = isTargetStricken(targetId);
         const customLimit = parseInt(targetMeta[targetId]?.inactiveLimitMin, 10) || 0;
         const effectiveLimit = getTargetInactiveLimit(targetId);
 
         const isNearDischarge = d.state === 'Hospital' && remainingSec <= 60 && !isStricken;
-        const stateKey = `${d.state}_${formattedTime}_${d.hpCurr}_${d.hpMax}_${d.online}_${isStricken}_${effectiveLimit}_${isNearDischarge}`;
+        const stateKey = `${d.state}_${formattedTime}_${overdueSec}_${d.hpCurr}_${d.hpMax}_${d.online}_${isStricken}_${effectiveLimit}_${isNearDischarge}`;
         if (card.dataset.lastStateKey === stateKey) return;
         card.dataset.lastStateKey = stateKey;
 
@@ -1777,7 +1778,11 @@
         }
         if (d.state === 'Hospital') {
             if (isNearDischarge) {
-                statusBadge += `<span class="stakeout-status-pill hospital near-ready" title="Hospital exit imminent (<= 1 min)! 1-second rapid refresh active. Exact: ${exactTooltip}">⚡ Hosp: ${formattedTime} (1s RAPID)</span>`;
+                if (overdueSec > 0) {
+                    statusBadge += `<span class="stakeout-status-pill hospital near-ready" title="${exactTooltip}">⚡ Hosp: Ready (+${overdueSec}s tick)</span>`;
+                } else {
+                    statusBadge += `<span class="stakeout-status-pill hospital near-ready" title="Hospital exit imminent (<= 1 min)! 1-second rapid refresh active. Exact: ${exactTooltip}">⚡ Hosp: ${formattedTime} (1s RAPID)</span>`;
+                }
             } else {
                 statusBadge += `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
             }
@@ -1816,8 +1821,13 @@
             let lockReason = '';
             if (!isOutAndAlive) {
                 if (d.state === 'Hospital') {
-                    lockReason = `🔒 CANNOT ATTACK (In Hospital: ${formattedTime})`;
-                    lockToastMsg = `Target [${d.name}] is in Hospital! Must be Out & Alive to attack.`;
+                    if (overdueSec > 0) {
+                        lockReason = `🔒 CANNOT ATTACK (Release Tick Pending: +${overdueSec}s)`;
+                        lockToastMsg = `Target [${d.name}] timer reached 0:00! Waiting for Torn's server cron tick to release them into 'Okay' state.`;
+                    } else {
+                        lockReason = `🔒 CANNOT ATTACK (In Hospital: ${formattedTime})`;
+                        lockToastMsg = `Target [${d.name}] is in Hospital! Must be Out & Alive to attack.`;
+                    }
                 } else if (d.state === 'Traveling') {
                     lockReason = `🔒 CANNOT ATTACK (Traveling: ${formattedTime})`;
                     lockToastMsg = `Target [${d.name}] is Traveling! Must be Out & Alive to attack.`;
