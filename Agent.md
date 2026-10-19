@@ -3271,3 +3271,45 @@ Extracted directly via Torn API stock market endpoints:
     - Executed automated test suite `verify_v120.js` (6/6 checks passed with 100% success).
   - **Date & Time**: 2026-10-19 17:25:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 130
+- **Focus**: Torn PDA Mercenary Stakeout Radar Adaptation & Mobile Optimization (`tornpda_stakeout_radar.user.js` v1.00 & `tornpda_stakeout_radar.meta.js` v1.00) — Standalone Mobile Architecture, `###PDA-APIKEY###` Zero-Config Macro Injection, Singleton Re-Injection Guards, 40px Elevated Mobile Dock, Long-Press (550ms) & Direct Tap Stricken Toggling, Mobile Haptic Vibration Feedback (`navigator.vibrate`), Touch-Unlocked Web Audio API, Dynamic 1-Second Hospital Polling, Full Energy & Drug Bells, and 1-Tap Profile Button Injection.
+  - **User Directive**:
+    - "no need. Are we able to replicate the radar for a tornPDA compatible variant?"
+    - Followed by "Option A" choosing a dedicated mobile-optimized standalone userscript.
+  - **Architecture, Mechanics & Native Torn PDA Adaptations**:
+    1. *Native Torn PDA Architecture Compliance*:
+       - Zero-Config API Key Macro: `const PDA_INJECTED_KEY = "###PDA-APIKEY###";`. Evaluated dynamically in `getApiKey()`. When loaded inside Torn PDA's webview, the client replaces this token with the active player's API key automatically, requiring 0 manual key configuration. Retains multi-tier local storage fallbacks for cross-platform and manual configurations.
+       - Singleton Re-Injection Guards: Torn PDA frequently re-executes userscripts on page transitions, tab switches, and internal history navigation. Script registers `window.__TORNPDA_STAKEOUT_RADAR_ACTIVE__` flag and delegates DOM refreshes to `window.__TORNPDA_STAKEOUT_RADAR_RECHECK__()`, preventing duplicate interval tickers, memory leaks, and multiple docks.
+       - GitHub Distribution & Metadata Headers: Created `tornpda_stakeout_radar.meta.js` and `tornpda_stakeout_radar.user.js` with `@downloadURL` and `@updateURL` pointing directly to GitHub `main` branch.
+    2. *Mobile-First Touch Ergonomics & Responsive UI*:
+       - Elevated Mobile Dock: Desktop fixed dock (`bottom: 20px`) occluded Torn PDA's bottom navigation bar. Elevated to `bottom: 68px; left: 10px;` with compact 40px touch pill (`#tornpda-radar-dock.minimized`) and slide-up responsive drawer (`max-width: 92vw; width: 340px; max-height: 80vh`).
+       - Touch Target Optimization: Minimum 44px tap targets (`touch-action: manipulation !important`, `-webkit-tap-highlight-color: transparent`) to prevent double-tap zoom delays and misclicks.
+    3. *Mobile Long-Press & Direct Tap Stricken Toggling*:
+       - Mobile touchscreens do not natively offer a right-click context menu.
+       - Engineered dual mechanisms:
+         - Direct Tap on `🎯` icon in the card header.
+         - Long-Press Gesture on the card: `ontouchstart` starts 550ms timer, `ontouchmove` cancels if drag exceeds 10px, `ontouchend` and `ontouchcancel` clear timer.
+         - Haptic Confirmation: Emits a 40ms haptic tap buzz (`triggerHaptic('tap')`) upon long-press completion.
+    4. *Mobile Haptic Vibration Feedback (`navigator.vibrate`)*:
+       - Implemented multi-tier vibration feedback in `triggerHaptic()`:
+         - Combat Alarm (`alarm`): Urgent pulsating pattern `[250ms buzz, 100ms pause, 250ms buzz, 100ms pause, 500ms buzz]`.
+         - Golden Bell (`bell`): Gentle chime pattern `[100ms buzz, 80ms pause, 180ms buzz]`.
+         - Tap / Gesture (`tap`): Crisp 40ms click feedback.
+       - User-controlled via Settings drawer toggle `📳 Mobile Haptic Vibration` (default enabled).
+    5. *Touch-Unlocked Mobile Web Audio Engine*:
+       - Mobile WebViews (iOS WebKit and Android WebView) enforce strict audio autoplay policies requiring user gestures.
+       - Implemented `unlockAudioEngine()` registered to passive capture events `['touchstart', 'touchend', 'click', 'keydown']` that instantly resumes suspended `AudioContext` on the very first touch.
+       - Included PCM WAV data URI base64 fallback.
+    6. *Combat Surveillance & Rapid Hospital Exits*:
+       - Web Worker ticker (`createBackgroundTicker`) with dynamic interval scaling.
+       - When any tracked target is in hospital with $<60$s remaining, polling interval seamlessly drops to 1-second rapid mode.
+       - Overdue tick release detection (`+Xs tick`) alerts the mercenary while waiting for Torn's server cron cycle.
+       - Full energy golden bell chime (with zero-quota DOM normalization fixing 15000 SVG coordinates to 150) and background drug cooldown chime.
+       - Profile page 1-click `[🎯 Stakeout]` button injection.
+  - **Verification**:
+    - `node --check tornpda_stakeout_radar.user.js tornpda_stakeout_radar.meta.js` (exit code 0).
+    - Executed automated test suite `verify_tornpda_radar.js` testing all 10 core integration requirements (100% pass rate).
+    - Cleaned up scratch scripts.
+  - **Date & Time**: 2026-10-20 00:38:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
