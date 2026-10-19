@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TornPDA - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.00
+// @version      1.01
 // @description  Torn PDA mobile-optimized stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, and instant alarms with 1-tap attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -30,7 +30,7 @@
     }
     window.__TORNPDA_STAKEOUT_RADAR_ACTIVE__ = true;
 
-    const SCRIPT_VERSION = "1.00";
+    const SCRIPT_VERSION = "1.01";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/tornpda_stakeout_radar.meta.js";
 
@@ -295,6 +295,8 @@
         pollingInterval: 5,         // seconds
         isPaused: false,
         isMinimized: false,
+        isTriggersMenuOpen: false,  // 🎯 Mobile Stakeout Triggers Menu (collapsed by default)
+        compactCards: true,         // 📱 Compact card layout for small mobile screens
         dockPosition: 'left'        // 'left' (default) | 'right'
     };
 
@@ -440,6 +442,49 @@
                 navigator.vibrate(40);
             }
         } catch (e) {}
+    }
+
+    // High-performance mobile touch tap binder with drag threshold and synthetic click debounce
+    function bindTap(el, callback) {
+        if (!el || typeof callback !== 'function') return;
+        let touchStarted = false;
+        let startX = 0, startY = 0;
+        let lastTrigger = 0;
+
+        const fire = (e) => {
+            const now = Date.now();
+            if (now - lastTrigger < 350) return;
+            lastTrigger = now;
+            triggerHaptic('tap');
+            callback(e);
+        };
+
+        el.addEventListener('touchstart', (e) => {
+            touchStarted = true;
+            if (e.touches && e.touches[0]) {
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+            }
+        }, { passive: true });
+
+        el.addEventListener('touchend', (e) => {
+            if (!touchStarted) return;
+            touchStarted = false;
+            if (e.changedTouches && e.changedTouches[0]) {
+                const dx = Math.abs(e.changedTouches[0].clientX - startX);
+                const dy = Math.abs(e.changedTouches[0].clientY - startY);
+                if (dx > 12 || dy > 12) return; // User was scrolling, not tapping
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            fire(e);
+        }, { passive: false });
+
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fire(e);
+        });
     }
 
     function playStakeoutAlarm(type = 'okay') {
@@ -996,7 +1041,7 @@
     safeAddStyle(`
         #tornpda-radar-dock {
             position: fixed !important;
-            bottom: 68px !important;
+            bottom: 64px !important;
             z-index: 999999 !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
             color: #f1f5f9 !important;
@@ -1005,30 +1050,30 @@
             touch-action: manipulation !important;
         }
         #tornpda-radar-dock.dock-left {
-            left: 10px !important;
+            left: 8px !important;
             right: auto !important;
         }
         #tornpda-radar-dock.dock-right {
-            right: 10px !important;
+            right: 8px !important;
             left: auto !important;
         }
 
         .tornpda-pill {
             display: inline-flex !important;
             align-items: center !important;
-            gap: 6px !important;
+            gap: 5px !important;
             background: rgba(15, 23, 42, 0.94) !important;
             backdrop-filter: blur(8px) !important;
             -webkit-backdrop-filter: blur(8px) !important;
             border: 1px solid #334155 !important;
-            border-radius: 24px !important;
-            padding: 8px 14px !important;
-            font-size: 13px !important;
+            border-radius: 20px !important;
+            padding: 5px 12px !important;
+            font-size: 12px !important;
             font-weight: 700 !important;
             cursor: pointer !important;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
             transition: all 0.2s ease !important;
-            min-height: 40px !important;
+            min-height: 36px !important;
         }
         .tornpda-pill:active {
             transform: scale(0.96) !important;
@@ -1046,14 +1091,14 @@
         }
 
         .tornpda-window {
-            width: 340px !important;
+            width: 315px !important;
             max-width: 92vw !important;
-            max-height: 75vh !important;
+            max-height: 68vh !important;
             background: rgba(15, 23, 42, 0.96) !important;
             backdrop-filter: blur(12px) !important;
             -webkit-backdrop-filter: blur(12px) !important;
             border: 1px solid #334155 !important;
-            border-radius: 12px !important;
+            border-radius: 10px !important;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
             display: flex !important;
             flex-direction: column !important;
@@ -1064,45 +1109,51 @@
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
-            padding: 10px 12px !important;
+            padding: 7px 10px !important;
             background: #0f172a !important;
             border-bottom: 1px solid #334155 !important;
         }
         .tornpda-title {
             display: flex !important;
             align-items: center !important;
-            gap: 6px !important;
-            font-size: 13px !important;
+            gap: 5px !important;
+            font-size: 12px !important;
             font-weight: 800 !important;
             color: #f8fafc !important;
         }
         .tornpda-header-actions {
             display: flex !important;
-            gap: 6px !important;
+            gap: 5px !important;
         }
         .tornpda-btn-icon {
             background: #1e293b !important;
             border: 1px solid #475569 !important;
             color: #cbd5e1 !important;
-            border-radius: 6px !important;
-            padding: 6px 10px !important;
-            font-size: 13px !important;
+            border-radius: 5px !important;
+            padding: 4px 8px !important;
+            font-size: 12px !important;
             cursor: pointer !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            min-height: 32px !important;
+            min-height: 28px !important;
+            min-width: 28px !important;
             touch-action: manipulation !important;
         }
         .tornpda-btn-icon:active {
             background: #334155 !important;
             transform: scale(0.96) !important;
         }
+        .tornpda-btn-icon.btn-active {
+            border-color: #38bdf8 !important;
+            color: #38bdf8 !important;
+            background: rgba(56, 189, 248, 0.15) !important;
+        }
 
         .tornpda-add-bar {
-            padding: 8px 12px !important;
+            padding: 6px 8px !important;
             display: flex !important;
-            gap: 6px !important;
+            gap: 5px !important;
             background: #1e293b !important;
             border-bottom: 1px solid #334155 !important;
         }
@@ -1111,10 +1162,11 @@
             background: #0f172a !important;
             border: 1px solid #475569 !important;
             color: #f8fafc !important;
-            border-radius: 6px !important;
-            padding: 6px 10px !important;
-            font-size: 12px !important;
+            border-radius: 5px !important;
+            padding: 4px 8px !important;
+            font-size: 11px !important;
             outline: none !important;
+            min-height: 28px !important;
         }
         .tornpda-input:focus {
             border-color: #38bdf8 !important;
@@ -1124,11 +1176,12 @@
             border: none !important;
             color: #fff !important;
             font-weight: 700 !important;
-            padding: 6px 12px !important;
-            border-radius: 6px !important;
+            padding: 4px 10px !important;
+            border-radius: 5px !important;
             cursor: pointer !important;
-            font-size: 12px !important;
-            min-height: 32px !important;
+            font-size: 11px !important;
+            min-height: 28px !important;
+            touch-action: manipulation !important;
         }
         .tornpda-btn-primary:active {
             background: #0369a1 !important;
@@ -1139,20 +1192,20 @@
             flex: 1 !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
-            padding: 8px 10px !important;
+            padding: 6px 8px !important;
             display: flex !important;
             flex-direction: column !important;
-            gap: 8px !important;
+            gap: 6px !important;
         }
 
         .tornpda-card {
             background: #1e293b !important;
             border: 1px solid #334155 !important;
-            border-radius: 8px !important;
-            padding: 9px !important;
+            border-radius: 6px !important;
+            padding: 7px 8px !important;
             display: flex !important;
             flex-direction: column !important;
-            gap: 6px !important;
+            gap: 4px !important;
             transition: all 0.2s ease !important;
             position: relative !important;
         }
@@ -1170,12 +1223,17 @@
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
+            gap: 4px !important;
         }
         .tornpda-card-name {
-            font-size: 13px !important;
+            font-size: 12px !important;
             font-weight: 800 !important;
             color: #f8fafc !important;
             text-decoration: none !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            flex: 1 !important;
         }
         .tornpda-card-actions {
             display: flex !important;
@@ -1186,18 +1244,19 @@
         .tornpda-status-row {
             display: flex !important;
             align-items: center !important;
-            gap: 6px !important;
+            gap: 5px !important;
             flex-wrap: wrap !important;
-            font-size: 11px !important;
+            font-size: 10.5px !important;
         }
         .tornpda-badge {
             display: inline-flex !important;
             align-items: center !important;
             gap: 3px !important;
-            padding: 2px 7px !important;
+            padding: 1px 6px !important;
             border-radius: 4px !important;
-            font-size: 10.5px !important;
+            font-size: 10px !important;
             font-weight: 700 !important;
+            line-height: 1.3 !important;
         }
         .tornpda-badge.badge-okay {
             background: rgba(34, 197, 94, 0.2) !important;
@@ -1233,14 +1292,14 @@
         }
 
         .tornpda-online-dot {
-            width: 8px !important;
-            height: 8px !important;
+            width: 7px !important;
+            height: 7px !important;
             border-radius: 50% !important;
             display: inline-block !important;
         }
         .tornpda-online-dot.dot-online {
             background: #22c55e !important;
-            box-shadow: 0 0 6px rgba(34, 197, 94, 0.8) !important;
+            box-shadow: 0 0 5px rgba(34, 197, 94, 0.8) !important;
         }
         .tornpda-online-dot.dot-idle {
             background: #f59e0b !important;
@@ -1251,9 +1310,9 @@
 
         .tornpda-btn-attack {
             width: 100% !important;
-            padding: 8px 10px !important;
-            border-radius: 6px !important;
-            font-size: 12px !important;
+            padding: 5px 8px !important;
+            border-radius: 5px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             cursor: pointer !important;
             border: none !important;
@@ -1264,8 +1323,8 @@
             align-items: center !important;
             justify-content: center !important;
             gap: 1px !important;
-            min-height: 42px !important;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+            min-height: 30px !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4) !important;
             touch-action: manipulation !important;
         }
         .tornpda-btn-attack.btn-ready {
@@ -1281,30 +1340,50 @@
         }
 
         .tornpda-settings {
-            background: #0f172a !important;
-            border-top: 1px solid #334155 !important;
-            padding: 10px !important;
+            background: #0b1120 !important;
+            border-bottom: 2px solid #38bdf8 !important;
+            padding: 8px 10px !important;
             display: flex !important;
             flex-direction: column !important;
-            gap: 8px !important;
-            font-size: 12px !important;
+            gap: 6px !important;
+            font-size: 11px !important;
             color: #cbd5e1 !important;
+            max-height: 48vh !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+        }
+        .tornpda-settings-head {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            padding-bottom: 4px !important;
+            border-bottom: 1px solid #334155 !important;
+            margin-bottom: 2px !important;
+        }
+        .tornpda-settings-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 4px 8px !important;
         }
         .tornpda-toggle-row {
             display: flex !important;
             align-items: center !important;
             justify-content: space-between !important;
             cursor: pointer !important;
-            min-height: 28px !important;
+            min-height: 24px !important;
+            gap: 4px !important;
+            font-size: 10.5px !important;
         }
-        .tornpda-toggle-row input {
-            width: 18px !important;
-            height: 18px !important;
+        .tornpda-toggle-row input[type="checkbox"] {
+            width: 16px !important;
+            height: 16px !important;
             cursor: pointer !important;
+            accent-color: #38bdf8 !important;
         }
 
         .tornpda-footer {
-            padding: 8px 12px !important;
+            padding: 6px 10px !important;
             background: #0f172a !important;
             border-top: 1px solid #334155 !important;
             display: flex !important;
@@ -1427,13 +1506,11 @@
                 </div>
             `;
             const toggleEl = document.getElementById('tornpda-pill-toggle');
-            if (toggleEl) {
-                toggleEl.onclick = () => {
-                    config.isMinimized = false;
-                    saveConfig();
-                    renderRadarUI();
-                };
-            }
+            bindTap(toggleEl, () => {
+                config.isMinimized = false;
+                saveConfig();
+                renderRadarUI();
+            });
             return;
         }
 
@@ -1447,15 +1524,17 @@
                         <span>🎯</span>
                         <span>Stakeout Radar</span>
                         <span style="font-size: 10px; color: ${config.isPaused ? '#f59e0b' : '#22c55e'}; font-weight: 700;">
-                            ${config.isPaused ? '⏸ PAUSED' : '● SCANNING'}
+                            ${config.isPaused ? '⏸ PAUSED' : '● SCAN'}
                         </span>
                     </div>
                     <div class="tornpda-header-actions">
-                        <button class="tornpda-btn-icon" id="tornpda-btn-pause" title="${config.isPaused ? 'Resume' : 'Pause'}">
+                        <button class="tornpda-btn-icon" id="tornpda-btn-pause" title="${config.isPaused ? 'Resume Scan' : 'Pause Scan'}">
                             ${config.isPaused ? '▶' : '⏸'}
                         </button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-settings" title="Settings">⚙</button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-minimize" title="Minimize">−</button>
+                        <button class="tornpda-btn-icon ${config.isTriggersMenuOpen ? 'btn-active' : ''}" id="tornpda-btn-settings" title="Toggle Triggers & Settings">
+                            ${config.isTriggersMenuOpen ? '⚙▲' : '⚙'}
+                        </button>
+                        <button class="tornpda-btn-icon" id="tornpda-btn-minimize" title="Minimize to Pill">−</button>
                     </div>
                 </div>
 
@@ -1464,99 +1543,108 @@
                     <button class="tornpda-btn-primary" id="tornpda-btn-add">+ Add</button>
                 </div>
 
-                <div id="tornpda-settings-panel" class="tornpda-settings" style="display: none;">
-                    <div style="font-weight: 800; color: #f8fafc; margin-bottom: 2px;">🎯 Mobile Stakeout Triggers:</div>
-                    <label class="tornpda-toggle-row" title="Requires target to meet BOTH criteria: 1. Out & Alive, and 2. Online or last action within configured limit">
-                        <span>⚔️ Alert on Attack Eligible (Out & Active)</span>
-                        <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row" title="Choose whether the Attack button opens the direct combat attack page or the user profile page for double confirmation">
-                        <span>⚔️ Attack Button Target</span>
-                        <select id="tornpda-attack-dest-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                <div id="tornpda-settings-panel" class="tornpda-settings" style="display: ${config.isTriggersMenuOpen ? 'flex' : 'none'};">
+                    <div class="tornpda-settings-head">
+                        <div style="font-weight: 800; color: #f8fafc; font-size: 11.5px; display: flex; align-items: center; gap: 4px;">
+                            <span>🎯</span>
+                            <span>Mobile Stakeout Triggers</span>
+                        </div>
+                        <button class="tornpda-btn-icon" id="tornpda-btn-close-triggers-top" style="padding: 2px 7px; font-size: 10.5px; font-weight: 700; border-color: #38bdf8; color: #38bdf8;" title="Minimize Triggers Menu">▲ Minimize</button>
+                    </div>
+
+                    <div class="tornpda-settings-grid">
+                        <label class="tornpda-toggle-row" title="Alert when target is out of hospital/flight and active">
+                            <span>⚔️ Ready Alert</span>
+                            <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Alert on flight arrival">
+                            <span>✈️ Landing</span>
+                            <input type="checkbox" id="toggle-alert-landing" ${config.alertOnLanding ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Alert when target reaches 100% HP">
+                            <span>🩸 Full HP</span>
+                            <input type="checkbox" id="toggle-alert-fullhp" ${config.alertOnFullHp ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Golden bell chime when energy reaches 100% capacity">
+                            <span>🔔 Energy Bell</span>
+                            <input type="checkbox" id="toggle-alert-fullenergy" ${config.alertOnFullEnergy ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Melodic chime when drug cooldown reaches 0:00">
+                            <span>💊 Drug Bell</span>
+                            <input type="checkbox" id="toggle-alert-drug" ${config.alertOnDrugCooldown ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Mobile haptic vibration buzz on alarms & taps">
+                            <span>📳 Haptic Vibe</span>
+                            <input type="checkbox" id="toggle-vibrate-alarm" ${config.vibrateAlarm ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Audio sound alarm siren / bell">
+                            <span>🔊 Sound Alarm</span>
+                            <input type="checkbox" id="toggle-sound-alarm" ${config.soundAlarm ? 'checked' : ''} />
+                        </label>
+                        <label class="tornpda-toggle-row" title="Streamlined compact card view for mobile">
+                            <span>📱 Compact</span>
+                            <input type="checkbox" id="toggle-compact-cards" ${config.compactCards !== false ? 'checked' : ''} />
+                        </label>
+                    </div>
+
+                    <label class="tornpda-toggle-row" style="margin-top: 2px;">
+                        <span>⚔️ Attack Button</span>
+                        <select id="tornpda-attack-dest-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 4px; border-radius: 4px; font-size: 10.5px;">
                             <option value="attack" ${(config.attackDestination || 'attack') === 'attack' ? 'selected' : ''}>⚔️ Direct Attack Page</option>
-                            <option value="profile" ${(config.attackDestination || 'attack') === 'profile' ? 'selected' : ''}>👤 Profile (Double Confirm)</option>
+                            <option value="profile" ${(config.attackDestination || 'attack') === 'profile' ? 'selected' : ''}>👤 Profile (Confirm)</option>
                         </select>
                     </label>
-                    <label class="tornpda-toggle-row" title="Global threshold for activity (Online or last action within this many minutes)">
-                        <span>⏱️ Inactive Limit (Default)</span>
-                        <select id="tornpda-inactive-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+
+                    <label class="tornpda-toggle-row">
+                        <span>⏱️ Inactive Limit</span>
+                        <select id="tornpda-inactive-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 4px; border-radius: 4px; font-size: 10.5px;">
                             <option value="2" ${(config.activeThresholdMin || 5) === 2 ? 'selected' : ''}>2 Mins</option>
                             <option value="5" ${(config.activeThresholdMin || 5) === 5 ? 'selected' : ''}>5 Mins (Default)</option>
                             <option value="10" ${(config.activeThresholdMin || 5) === 10 ? 'selected' : ''}>10 Mins</option>
                             <option value="15" ${(config.activeThresholdMin || 5) === 15 ? 'selected' : ''}>15 Mins</option>
                             <option value="30" ${(config.activeThresholdMin || 5) === 30 ? 'selected' : ''}>30 Mins</option>
-                            <option value="60" ${(config.activeThresholdMin || 5) === 60 ? 'selected' : ''}>60 Mins (1 Hour)</option>
+                            <option value="60" ${(config.activeThresholdMin || 5) === 60 ? 'selected' : ''}>60 Mins</option>
                         </select>
                     </label>
+
                     <label class="tornpda-toggle-row">
-                        <span>Alert on Flight Landing (Out & Active)</span>
-                        <input type="checkbox" id="toggle-alert-landing" ${config.alertOnLanding ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row">
-                        <span>Alert on Full 100% HP</span>
-                        <input type="checkbox" id="toggle-alert-fullhp" ${config.alertOnFullHp ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row" title="Plays a golden bell chime when your Energy reaches 100% while waiting for hospital targets, so you can train off energy without capping">
-                        <span>🔔 Energy Full Bell (Train Reminder)</span>
-                        <input type="checkbox" id="toggle-alert-fullenergy" ${config.alertOnFullEnergy ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row" title="Plays a melodic bell chime and notifies you when your Drug cooldown reaches 0:00 (Ready to take another drug)">
-                        <span>💊 Drug Cooldown Bell</span>
-                        <input type="checkbox" id="toggle-alert-drug" ${config.alertOnDrugCooldown ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row">
-                        <span>Audio Sound Alarm</span>
-                        <input type="checkbox" id="toggle-sound-alarm" ${config.soundAlarm ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row" title="Mobile vibration buzz when a target becomes ready or bells fire">
-                        <span>📳 Mobile Haptic Vibration</span>
-                        <input type="checkbox" id="toggle-vibrate-alarm" ${config.vibrateAlarm ? 'checked' : ''} />
-                    </label>
-                    <label class="tornpda-toggle-row">
-                        <span>🔊 Alarm Volume</span>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="range" id="tornpda-vol-slider" min="10" max="100" value="${Math.round((config.alarmVolume ?? 1.0) * 100)}" style="width: 80px; accent-color: #38bdf8;" />
-                            <span id="tornpda-vol-label" style="font-size: 11px; font-family: monospace; min-width: 32px; text-align: right; color: #38bdf8;">${Math.round((config.alarmVolume ?? 1.0) * 100)}%</span>
-                        </div>
-                    </label>
-                    <label class="tornpda-toggle-row">
-                        <span>🎵 Combat Alarm Sound</span>
-                        <select id="tornpda-sound-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
-                            <option value="siren" ${(config.alarmSoundType || 'siren') === 'siren' ? 'selected' : ''}>🚨 Emergency Siren (Loudest)</option>
+                        <span>🎵 Combat Alarm</span>
+                        <select id="tornpda-sound-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 4px; border-radius: 4px; font-size: 10.5px;">
+                            <option value="siren" ${(config.alarmSoundType || 'siren') === 'siren' ? 'selected' : ''}>🚨 Emergency Siren</option>
                             <option value="horn" ${(config.alarmSoundType || 'siren') === 'horn' ? 'selected' : ''}>📯 Tactical Air Horn</option>
                             <option value="klaxon" ${(config.alarmSoundType || 'siren') === 'klaxon' ? 'selected' : ''}>⚠️ Heavy Klaxon</option>
                             <option value="chime" ${(config.alarmSoundType || 'siren') === 'chime' ? 'selected' : ''}>🔔 Bright Chime</option>
                         </select>
                     </label>
+
+                    <label class="tornpda-toggle-row">
+                        <span>🔊 Volume</span>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="range" id="tornpda-vol-slider" min="10" max="100" value="${Math.round((config.alarmVolume ?? 1.0) * 100)}" style="width: 70px; accent-color: #38bdf8;" />
+                            <span id="tornpda-vol-label" style="font-size: 10px; font-family: monospace; min-width: 28px; text-align: right; color: #38bdf8;">${Math.round((config.alarmVolume ?? 1.0) * 100)}%</span>
+                        </div>
+                    </label>
+
                     <label class="tornpda-toggle-row">
                         <span>📍 Dock Position</span>
-                        <select id="tornpda-position-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                        <select id="tornpda-position-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 4px; border-radius: 4px; font-size: 10.5px;">
                             <option value="left" ${(config.dockPosition || 'left') === 'left' ? 'selected' : ''}>Bottom Left (Default)</option>
                             <option value="right" ${(config.dockPosition || 'left') === 'right' ? 'selected' : ''}>Bottom Right</option>
                         </select>
                     </label>
 
-                    <div style="border-top: 1px solid #334155; margin-top: 4px; padding-top: 6px;">
-                        <div style="font-weight: 800; color: #f8fafc; margin-bottom: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
-                            <span>🔑 Torn API Key</span>
-                            <button class="tornpda-btn-icon" id="tornpda-btn-set-key" style="padding: 2px 8px; font-size: 10px; border-color: #38bdf8; color: #38bdf8;" title="Change Key">Change Key</button>
-                        </div>
-                        <div style="font-size: 10.5px; color: #94a3b8; line-height: 1.4;">
-                            <div>Active: <strong style="color: ${keyDetails.key ? '#38bdf8' : '#ef4444'}; font-family: monospace;">${maskApiKey(keyDetails.key)}</strong></div>
-                            <div>Source: <span style="color: #cbd5e1;">${keyDetails.source}</span></div>
-                            ${keyDetails.uid ? `<div style="color: #64748b;">Logged-in User ID: [${keyDetails.uid}]</div>` : ''}
-                        </div>
+                    <div style="border-top: 1px solid #334155; margin-top: 2px; padding-top: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 10.5px;">
+                        <span>🔑 API: <strong style="color: ${keyDetails.key ? '#38bdf8' : '#ef4444'}; font-family: monospace;">${maskApiKey(keyDetails.key)}</strong></span>
+                        <button class="tornpda-btn-icon" id="tornpda-btn-set-key" style="padding: 2px 6px; font-size: 9.5px; border-color: #38bdf8; color: #38bdf8;" title="Change Key">Change Key</button>
                     </div>
 
-                    <div style="display: flex; gap: 4px; margin-top: 4px;">
-                        <button class="tornpda-btn-icon" id="tornpda-btn-test-sound" style="flex: 1; padding: 4px;" title="Test Siren Alarm">🔊 Siren</button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-test-bell" style="flex: 1; padding: 4px; border-color: #f59e0b; color: #fbbf24;" title="Test Melodic Bell">🔔 Bell</button>
-                        <button class="tornpda-btn-icon" id="tornpda-btn-check-update" style="flex: 1; padding: 4px; border-color: #38bdf8; color: #38bdf8;" title="Check for Updates">🔄 Updates</button>
+                    <div style="display: flex; gap: 4px; margin-top: 2px;">
+                        <button class="tornpda-btn-icon" id="tornpda-btn-test-sound" style="flex: 1; padding: 3px; font-size: 10.5px;" title="Test Siren Alarm">🔊 Siren</button>
+                        <button class="tornpda-btn-icon" id="tornpda-btn-test-bell" style="flex: 1; padding: 3px; font-size: 10.5px; border-color: #f59e0b; color: #fbbf24;" title="Test Melodic Bell">🔔 Bell</button>
+                        <button class="tornpda-btn-icon" id="tornpda-btn-check-update" style="flex: 1; padding: 3px; font-size: 10.5px; border-color: #38bdf8; color: #38bdf8;" title="Check for Updates">🔄 Updates</button>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 2px;">
-                        <span>TornPDA Radar v${SCRIPT_VERSION}</span>
-                        <span id="tornpda-footer-rate">Rate: ${callRate}/90 cpm</span>
-                    </div>
+
+                    <button class="tornpda-btn-icon" id="tornpda-btn-close-triggers-bottom" style="width: 100%; padding: 5px; font-size: 11px; font-weight: 700; border-color: #38bdf8; color: #38bdf8; margin-top: 4px;" title="Minimize Triggers Menu">▲ Minimize Triggers Menu</button>
                 </div>
 
                 <div class="tornpda-body" id="tornpda-target-list">
@@ -1586,54 +1674,50 @@
 
     function setupSettingsListeners() {
         const minBtn = document.getElementById('tornpda-btn-minimize');
-        if (minBtn) {
-            minBtn.onclick = () => {
-                config.isMinimized = true;
-                saveConfig();
-                renderRadarUI();
-            };
-        }
+        bindTap(minBtn, () => {
+            config.isMinimized = true;
+            saveConfig();
+            renderRadarUI();
+        });
 
         const pauseBtn = document.getElementById('tornpda-btn-pause');
-        if (pauseBtn) {
-            pauseBtn.onclick = () => {
-                config.isPaused = !config.isPaused;
-                saveConfig();
-                renderRadarUI();
-            };
-        }
+        bindTap(pauseBtn, () => {
+            config.isPaused = !config.isPaused;
+            saveConfig();
+            renderRadarUI();
+        });
 
         const settingsPanel = document.getElementById('tornpda-settings-panel');
         const settingsBtn = document.getElementById('tornpda-btn-settings');
-        if (settingsBtn && settingsPanel) {
-            settingsBtn.onclick = () => {
-                settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'flex' : 'none';
-            };
-        }
+        const toggleTriggers = () => {
+            config.isTriggersMenuOpen = !config.isTriggersMenuOpen;
+            saveConfig();
+            if (settingsPanel) {
+                settingsPanel.style.display = config.isTriggersMenuOpen ? 'flex' : 'none';
+            }
+            if (settingsBtn) {
+                settingsBtn.classList.toggle('btn-active', !!config.isTriggersMenuOpen);
+                settingsBtn.innerHTML = config.isTriggersMenuOpen ? '⚙▲' : '⚙';
+            }
+        };
+        bindTap(settingsBtn, toggleTriggers);
+
+        const closeBtnTop = document.getElementById('tornpda-btn-close-triggers-top');
+        const closeBtnBottom = document.getElementById('tornpda-btn-close-triggers-bottom');
+        const closeTriggers = () => {
+            config.isTriggersMenuOpen = false;
+            saveConfig();
+            if (settingsPanel) settingsPanel.style.display = 'none';
+            if (settingsBtn) {
+                settingsBtn.classList.remove('btn-active');
+                settingsBtn.innerHTML = '⚙';
+            }
+        };
+        bindTap(closeBtnTop, closeTriggers);
+        bindTap(closeBtnBottom, closeTriggers);
 
         const tOkay = document.getElementById('toggle-alert-okay');
         if (tOkay) tOkay.onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
-
-        const attackDestSelect = document.getElementById('tornpda-attack-dest-select');
-        if (attackDestSelect) {
-            attackDestSelect.onchange = (e) => {
-                config.attackDestination = e.target.value;
-                saveConfig();
-                showStakeoutToast(config.attackDestination === 'profile'
-                    ? '👤 Attack button set to open Target Profile (for confirmation).'
-                    : '⚔️ Attack button set to open Direct Attack page.');
-                watchlist.forEach(id => updateTargetCardUI(id));
-            };
-        }
-
-        const inactiveSelect = document.getElementById('tornpda-inactive-select');
-        if (inactiveSelect) {
-            inactiveSelect.onchange = (e) => {
-                config.activeThresholdMin = parseInt(e.target.value, 10) || 5;
-                saveConfig();
-                renderRadarUI();
-            };
-        }
 
         const tLanding = document.getElementById('toggle-alert-landing');
         if (tLanding) tLanding.onchange = (e) => { config.alertOnLanding = e.target.checked; saveConfig(); };
@@ -1659,15 +1743,45 @@
             };
         }
 
-        const tSound = document.getElementById('toggle-sound-alarm');
-        if (tSound) tSound.onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
-
         const tVibrate = document.getElementById('toggle-vibrate-alarm');
         if (tVibrate) {
             tVibrate.onchange = (e) => {
                 config.vibrateAlarm = e.target.checked;
                 saveConfig();
                 if (e.target.checked) triggerHaptic('alarm');
+            };
+        }
+
+        const tSound = document.getElementById('toggle-sound-alarm');
+        if (tSound) tSound.onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
+
+        const tCompact = document.getElementById('toggle-compact-cards');
+        if (tCompact) {
+            tCompact.onchange = (e) => {
+                config.compactCards = e.target.checked;
+                saveConfig();
+                watchlist.forEach(id => updateTargetCardUI(id));
+            };
+        }
+
+        const attackDestSelect = document.getElementById('tornpda-attack-dest-select');
+        if (attackDestSelect) {
+            attackDestSelect.onchange = (e) => {
+                config.attackDestination = e.target.value;
+                saveConfig();
+                showStakeoutToast(config.attackDestination === 'profile'
+                    ? '👤 Attack button set to open Target Profile (for confirmation).'
+                    : '⚔️ Attack button set to open Direct Attack page.');
+                watchlist.forEach(id => updateTargetCardUI(id));
+            };
+        }
+
+        const inactiveSelect = document.getElementById('tornpda-inactive-select');
+        if (inactiveSelect) {
+            inactiveSelect.onchange = (e) => {
+                config.activeThresholdMin = parseInt(e.target.value, 10) || 5;
+                saveConfig();
+                renderRadarUI();
             };
         }
 
@@ -1702,16 +1816,16 @@
         }
 
         const testSoundBtn = document.getElementById('tornpda-btn-test-sound');
-        if (testSoundBtn) testSoundBtn.onclick = () => playStakeoutAlarm('test');
+        bindTap(testSoundBtn, () => playStakeoutAlarm('test'));
 
         const testBellBtn = document.getElementById('tornpda-btn-test-bell');
-        if (testBellBtn) testBellBtn.onclick = () => playStakeoutAlarm('bell');
+        bindTap(testBellBtn, () => playStakeoutAlarm('bell'));
 
         const checkUpdateBtn = document.getElementById('tornpda-btn-check-update');
-        if (checkUpdateBtn) checkUpdateBtn.onclick = () => checkForScriptUpdates(true);
+        bindTap(checkUpdateBtn, () => checkForScriptUpdates(true));
 
         const setKeyBtn = document.getElementById('tornpda-btn-set-key');
-        if (setKeyBtn) setKeyBtn.onclick = promptSetApiKey;
+        bindTap(setKeyBtn, promptSetApiKey);
 
         const inputEl = document.getElementById('tornpda-input-target');
         const addBtn = document.getElementById('tornpda-btn-add');
@@ -1736,7 +1850,7 @@
             }
         };
 
-        if (addBtn) addBtn.onclick = handleAdd;
+        bindTap(addBtn, handleAdd);
         if (inputEl) {
             inputEl.onkeydown = (e) => {
                 if (e.key === 'Enter') handleAdd();
@@ -1777,11 +1891,11 @@
                 <div class="tornpda-card-header">
                     <span class="tornpda-card-name">Player [${targetId}]</span>
                     <div class="tornpda-card-actions">
-                        <button class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 2px 6px; font-size: 11px;" title="Toggle Stricken">🎯</button>
-                        <button class="tornpda-btn-icon" data-del="${targetId}" style="padding: 2px 6px; font-size: 11px; color: #f87171;" title="Remove">✕</button>
+                        <button class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px;" title="Toggle Stricken">🎯</button>
+                        <button class="tornpda-btn-icon" data-del="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; color: #f87171;" title="Remove">✕</button>
                     </div>
                 </div>
-                <div style="font-size: 11px; color: #94a3b8;">Fetching live status...</div>
+                <div style="font-size: 10.5px; color: #94a3b8;">Fetching live status...</div>
             `;
             bindCardActions(card, targetId);
             return;
@@ -1797,13 +1911,13 @@
             statusBadgeHtml = `<span class="tornpda-badge badge-okay">● Okay</span>`;
         } else if (d.state === 'Hospital') {
             if (overdueSec > 0) {
-                statusBadgeHtml = `<span class="tornpda-badge badge-hosp-ready">⚡ Hosp: Ready (+${overdueSec}s)</span>`;
+                statusBadgeHtml = `<span class="tornpda-badge badge-hosp-ready">⚡ Hosp (+${overdueSec}s)</span>`;
             } else {
                 const rem = d.until > nowSec ? d.until - nowSec : 0;
-                statusBadgeHtml = `<span class="tornpda-badge badge-hosp">🏥 Hosp (${formatCountdown(rem)})</span>`;
+                statusBadgeHtml = `<span class="tornpda-badge badge-hosp">🏥 Hosp ${formatCountdown(rem)}</span>`;
             }
         } else if (d.state === 'Traveling') {
-            statusBadgeHtml = `<span class="tornpda-badge badge-travel">✈️ ${d.desc || 'Traveling'}</span>`;
+            statusBadgeHtml = `<span class="tornpda-badge badge-travel">✈️ ${d.desc || 'Travel'}</span>`;
         } else {
             statusBadgeHtml = `<span class="tornpda-badge badge-other">${d.state}</span>`;
         }
@@ -1824,14 +1938,14 @@
             attackButtonHtml = `
                 <a href="${attackUrl}" target="_blank" class="tornpda-btn-attack btn-ready" style="text-decoration: none;">
                     <span>${mainLabel}</span>
-                    <span style="font-size: 9.5px; opacity: 0.9;">${subLabel}</span>
+                    <span style="font-size: 9px; opacity: 0.9;">${subLabel}</span>
                 </a>
             `;
         } else {
-            let reason = 'Target Not Ready';
+            let reason = 'Not Ready';
             if (d.state === 'Hospital') {
                 const rem = d.until > nowSec ? d.until - nowSec : 0;
-                reason = overdueSec > 0 ? `Release Tick Pending (+${overdueSec}s)` : `Hospital (${formatCountdown(rem)})`;
+                reason = overdueSec > 0 ? `Release Tick (+${overdueSec}s)` : `Hosp ${formatCountdown(rem)}`;
             } else if (d.state !== 'Okay') {
                 reason = d.state;
             } else if (!isTargetActiveWithinLimit(d, nowSec, targetId)) {
@@ -1840,8 +1954,7 @@
 
             attackButtonHtml = `
                 <button class="tornpda-btn-attack btn-locked" disabled>
-                    <span>🔒 CANNOT ATTACK</span>
-                    <span style="font-size: 9.5px;">${reason}</span>
+                    <span>🔒 CANNOT ATTACK • <span style="font-size: 9.5px; opacity: 0.9;">${reason}</span></span>
                 </button>
             `;
         }
@@ -1849,38 +1962,32 @@
         card.className = `tornpda-card ${isEligible ? 'ready-card' : ''} ${isStricken ? 'stricken-card' : ''}`;
         card.innerHTML = `
             <div class="tornpda-card-header">
-                <a href="https://www.torn.com/profiles.php?XID=${targetId}" target="_blank" class="tornpda-card-name">
+                <a href="https://www.torn.com/profiles.php?XID=${targetId}" target="_blank" class="tornpda-card-name" title="${d.name} [${targetId}]">
                     ${d.name} [${targetId}]
                 </a>
                 <div class="tornpda-card-actions">
-                    <button class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 2px 6px; font-size: 11px; ${isStricken ? 'border-color: #ef4444; color: #fca5a5;' : ''}" title="Tap to toggle Stricken">🎯</button>
-                    <button class="tornpda-btn-icon" data-del="${targetId}" style="padding: 2px 6px; font-size: 11px; color: #f87171;" title="Remove target">✕</button>
+                    <button class="tornpda-btn-icon" data-toggle-stricken="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; ${isStricken ? 'border-color: #ef4444; color: #fca5a5;' : ''}" title="Tap to toggle Stricken">🎯</button>
+                    <button class="tornpda-btn-icon" data-del="${targetId}" style="padding: 1px 5px; font-size: 10px; min-height: 22px; min-width: 22px; color: #f87171;" title="Remove target">✕</button>
                 </div>
             </div>
 
             <div class="tornpda-status-row">
                 ${statusBadgeHtml}
-                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: #cbd5e1;">
+                <span style="display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: #cbd5e1;">
                     <span class="tornpda-online-dot ${dotClass}"></span>
                     <span>${d.online}</span>
                     ${d.lastActionRel ? `<span style="color: #94a3b8;">(${d.lastActionRel})</span>` : ''}
                 </span>
+                <span style="font-size: 10px; color: #94a3b8; margin-left: auto;">${Math.round(d.hpPct)}% HP</span>
+                <select data-limit-select="${targetId}" style="background: #0f172a; border: 1px solid #475569; color: #f8fafc; font-size: 9.5px; border-radius: 3px; padding: 0 2px; height: 18px;" title="Activity limit">
+                    <option value="2" ${currentLimit === 2 ? 'selected' : ''}>2m</option>
+                    <option value="5" ${currentLimit === 5 ? 'selected' : ''}>5m</option>
+                    <option value="10" ${currentLimit === 10 ? 'selected' : ''}>10m</option>
+                    <option value="15" ${currentLimit === 15 ? 'selected' : ''}>15m</option>
+                    <option value="30" ${currentLimit === 30 ? 'selected' : ''}>30m</option>
+                    <option value="60" ${currentLimit === 60 ? 'selected' : ''}>60m</option>
+                </select>
                 ${isStricken ? '<span class="tornpda-badge badge-stricken" data-toggle-stricken="' + targetId + '">🎯 STRICKEN</span>' : ''}
-            </div>
-
-            <div style="font-size: 10.5px; color: #94a3b8; display: flex; justify-content: space-between; align-items: center;">
-                <span>HP: ${d.hpCurr.toLocaleString()} / ${d.hpMax.toLocaleString()} (${Math.round(d.hpPct)}%)</span>
-                <span style="display: flex; align-items: center; gap: 4px;">
-                    <span>Limit:</span>
-                    <select data-limit-select="${targetId}" style="background: #0f172a; border: 1px solid #475569; color: #f8fafc; font-size: 10px; border-radius: 3px; padding: 1px 3px;">
-                        <option value="2" ${currentLimit === 2 ? 'selected' : ''}>2m</option>
-                        <option value="5" ${currentLimit === 5 ? 'selected' : ''}>5m</option>
-                        <option value="10" ${currentLimit === 10 ? 'selected' : ''}>10m</option>
-                        <option value="15" ${currentLimit === 15 ? 'selected' : ''}>15m</option>
-                        <option value="30" ${currentLimit === 30 ? 'selected' : ''}>30m</option>
-                        <option value="60" ${currentLimit === 60 ? 'selected' : ''}>60m</option>
-                    </select>
-                </span>
             </div>
 
             ${attackButtonHtml}
@@ -1893,8 +2000,7 @@
         // Delete button
         const delBtn = card.querySelector(`[data-del="${targetId}"]`);
         if (delBtn) {
-            delBtn.onclick = (e) => {
-                e.stopPropagation();
+            bindTap(delBtn, (e) => {
                 if (confirm(`Remove [${targetsCache[targetId]?.data?.name || targetId}] from Stakeout Radar?`)) {
                     watchlist = watchlist.filter(id => id !== targetId);
                     saveWatchlist();
@@ -1902,16 +2008,15 @@
                     renderRadarUI();
                     showStakeoutToast('Target removed from radar.');
                 }
-            };
+            });
         }
 
         // Tap on 🎯 icon or 🎯 STRICKEN badge to toggle Stricken
         const strickenBtns = card.querySelectorAll(`[data-toggle-stricken="${targetId}"]`);
         strickenBtns.forEach(btn => {
-            btn.onclick = (e) => {
-                e.stopPropagation();
+            bindTap(btn, (e) => {
                 toggleTargetStricken(targetId);
-            };
+            });
         });
 
         // Inactive limit dropdown
@@ -1925,7 +2030,7 @@
             };
         }
 
-        // Touch Long-Press gesture for mobile (hold 500ms to toggle Stricken)
+        // Touch Long-Press gesture for mobile (hold 550ms to toggle Stricken)
         let pressTimer = null;
         let startX = 0;
         let startY = 0;

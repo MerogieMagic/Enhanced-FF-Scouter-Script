@@ -3313,3 +3313,45 @@ Extracted directly via Torn API stock market endpoints:
     - Cleaned up scratch scripts.
   - **Date & Time**: 2026-10-20 00:38:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 131
+- **Focus**: Mobile Stakeout Triggers Menu Minimization & Small-Screen Compact Architecture (`tornpda_stakeout_radar.user.js` v1.01 & `tornpda_stakeout_radar.meta.js` v1.01) — Dedicated Triggers Menu Top & Bottom Minimize Controls, Responsive `bindTap` Touch Engine with Debounce & Scroll Cancellation, 315px Compact Window, 2-Column Triggers Grid, and Sleek 3-Row Target Cards.
+  - **User Directive**:
+    - "unable to minimize the mobile stakeout triggers menu. also it should be a compact variant given the small screen"
+  - **Root Cause & Ergonomic Diagnosis**:
+    1. *Missing Triggers Menu Minimize Controls*:
+       - In v1.00, opening Settings via the header `⚙` button rendered the full "Mobile Stakeout Triggers" panel between the Add Bar and Target Cards.
+       - The panel had no internal minimize, close, or collapse button. Once opened, it occupied the viewport, clipping behind the 75vh overflow-hidden container and pushing cards off-screen.
+       - The only minimize button was `−` in the main dock header, which closed the *entire radar window* into a pill rather than collapsing the triggers menu, leaving mobile users trapped in the settings view.
+    2. *Small-Screen Mobile Footprint*:
+       - Target cards were 120px tall across 4 stacked rows (header, status row, metrics/dropdown row, and bulky 44px 2-line attack button).
+       - On smaller mobile displays (e.g., 360–390px width), 2 cards consumed the entire vertical space.
+       - Checkbox options were rendered in 14 single-column full-width rows, creating extensive vertical scrolling.
+    3. *Mobile Touch Synthesis Latency*:
+       - Standard desktop `onclick` listeners on mobile WebViews (such as Flutter InAppWebView in Torn PDA) suffer from synthetic click drops, 300ms touch delays, or touch cancellation when scrolling.
+  - **Architectural & Design Solutions (`v1.01`)**:
+    1. *Dedicated Dual Triggers Menu Minimize Controls*:
+       - Added a prominent `▲ Minimize` button right in the Triggers Menu header (`#tornpda-btn-close-triggers-top`).
+       - Added a full-width `▲ Minimize Triggers Menu` button at the bottom of the panel (`#tornpda-btn-close-triggers-bottom`) so users can close the panel without scrolling back to the top.
+       - Header `⚙` button dynamically updates to `⚙▲` with active blue glow when open, toggling between expanded and collapsed states.
+       - Panel is constrained to `max-height: 48vh; overflow-y: auto; -webkit-overflow-scrolling: touch;`.
+    2. *Ultra-Compact Mobile Layout*:
+       - Compact Dock Window: Reduced width to `315px` (`max-width: 92vw; max-height: 68vh;`), with 7px header padding and clean 28px touch buttons.
+       - 2-Column Settings Grid (`.tornpda-settings-grid`): Binary alert checkboxes arranged in a space-saving 2-column grid (`⚔️ Ready Alert`, `✈️ Landing`, `🩸 Full HP`, `🔔 Energy Bell`, `💊 Drug Bell`, `📳 Haptic Vibe`, `🔊 Sound Alarm`, `📱 Compact Cards`).
+       - Sleek 3-Row Target Cards (`.tornpda-card`):
+         - Row 1: Player Name [ID] + 🎯 Stricken button + ✕ Remove button (22px micro buttons).
+         - Row 2: Status badge + Online dot + Online state & relative time + HP% + compact Inactive Limit select + 🎯 STRICKEN badge.
+         - Row 3: Single-line 30px compact action button (`⚔️ ATTACK TARGET (READY)` or `🔒 CANNOT ATTACK • Hosp 14m / Inactive >5m`).
+         - Reduces card height by 40%, allowing multiple targets to fit cleanly on screen.
+    3. *High-Performance `bindTap` Touch Engine*:
+       - Engineered `bindTap(el, callback)` handling both `touchend` and synthetic `click`.
+       - Measures touch delta ($dx \le 12\text{px}, dy \le 12\text{px}$) to differentiate genuine taps from drag-scrolling gestures.
+       - 350ms timestamp debounce prevents double execution from synthetic clicks.
+       - Dispatches instant haptic vibration (`triggerHaptic('tap')` 40ms buzz) on touch.
+       - Applied across all interactive buttons: window minimize (`−`), pill toggle, settings toggle (`⚙`), top/bottom triggers minimize, add target, card delete, and card stricken toggles.
+  - **Verification**:
+    - `node --check tornpda_stakeout_radar.user.js tornpda_stakeout_radar.meta.js` (exit code 0).
+    - Executed automated test suite `verify_v101_compact.js` verifying all 7 core functional requirements with 100% success.
+    - Cleaned up scratch scripts.
+  - **Date & Time**: 2026-10-20 00:56:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
