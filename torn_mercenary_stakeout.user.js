@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.19
+// @version      1.20
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.19";
+    const SCRIPT_VERSION = "1.20";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -291,13 +291,7 @@
         alertOnLanding: true,       // Alert on flight arrival (only if Out & Alive + Active)
         alertOnFullHp: false,       // Alert on 100% HP (only if Out & Alive + Active)
         alertOnFullEnergy: true,    // 🔔 Alert when player energy reaches 100% capacity
-        alertOnDrugCooldown: true,  // 💊 Alert when Drug cooldown reaches 0s (Ready)
-        alertOnMedCooldown: true,   // 💉 Alert when Medical cooldown reaches 0s (Ready)
-        alertOnBoosterCooldown: true, // 🍫 Alert when Booster cooldown reaches 0s (Ready)
-        medicalCapHours: 6,         // Base 6h (up to 24h with faction perks)
-        boosterCapHours: 24,        // Base 24h (up to 48h with faction perks)
-        drugCapHours: 8,            // Standard single drug max duration (e.g. Xanax 8h)
-        isCooldownBoxCollapsed: false, // Collapse/expand state of the Cooldown & Energy box
+        alertOnDrugCooldown: true,  // 💊 Little bell chime when drug cooldown reaches 0:00 (Ready to take next drug)
         attackDestination: 'attack', // 'attack' (Direct sid=attack) | 'profile' (User Profile for double confirm)
         soundAlarm: true,
         alarmVolume: 1.0,           // 0.1 to 1.0 (10% to 100%)
@@ -762,35 +756,10 @@
                     oscFund.stop(t0 + b.dur);
                     oscHarm.stop(t0 + b.dur);
                 });
-            } else if (type === 'cooldown') {
-                // Cooldown Ready Melodic Chime (Drug, Medical, Booster): Upbeat 2-tone chime (G5 784Hz -> C6 1046.5Hz) with crisp acoustic decay
-                const masterGain = ctx.createGain();
-                masterGain.gain.setValueAtTime(0.85 * vol, ctx.currentTime);
-                masterGain.connect(ctx.destination);
-
-                const strikes = [
-                    { f: 783.99, start: 0, dur: 0.35 },    // G5
-                    { f: 1046.50, start: 0.16, dur: 0.7 }   // C6
-                ];
-
-                strikes.forEach(s => {
-                    const t0 = ctx.currentTime + s.start;
-                    const osc = ctx.createOscillator();
-                    const g = ctx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(s.f, t0);
-                    g.gain.setValueAtTime(0.001, t0);
-                    g.gain.linearRampToValueAtTime(0.65, t0 + 0.01);
-                    g.gain.exponentialRampToValueAtTime(0.001, t0 + s.dur);
-                    osc.connect(g);
-                    g.connect(masterGain);
-                    osc.start(t0);
-                    osc.stop(t0 + s.dur);
-                });
             }
         } catch (e) {
             console.error('[Stakeout] Audio error, falling back to PCM WAV:', e);
-            playPcmWavFallback(type === 'warning' ? 1046 : (type === 'bell' ? 1318 : (type === 'cooldown' ? 1046 : 880)), 800, vol);
+            playPcmWavFallback(type === 'warning' ? 1046 : (type === 'bell' ? 1318 : 880), 800, vol);
         }
     }
 
@@ -977,343 +946,102 @@
         }
     }
 
-    // --- 4.2 PERSONAL COOLDOWNS & DOM STATUS ICON ENGINE ---
-    function getCooldownsFromDom() {
-        const res = {
-            drug: { active: false, label: 'Ready' },
-            medical: { active: false, label: 'Ready' },
-            booster: { active: false, label: 'Ready' }
-        };
+    // --- 4.2 DRUG COOLDOWN BELL ALERT (LIGHTWEIGHT BACKGROUND MONITOR) ---
+    let drugCooldownExpiresAt = 0;
+    let drugWasActive = false;
+    let drugAlertFired = true; // Initialized to true to prevent false alarms on initial page load
+    let lastDrugApiSyncTime = 0;
 
+    function isDrugActiveInDom() {
         try {
-            // Find all candidate status icon elements in sidebar / header
-            const iconElements = [];
-            const containers = document.querySelectorAll('[class*="status-icons"], #sidebarroot [class*="icons"], [class*="user-icons"], .user-information');
-            containers.forEach(c => {
-                c.querySelectorAll('span, i, div, a, li, img').forEach(el => iconElements.push(el));
-            });
+            const sidebar = document.getElementById('sidebarroot') || document.body;
+            // Check direct icon classes/IDs for drug icons (49 through 53)
+            const direct = sidebar.querySelector(
+                '[class*="icon49"], [class*="icon50"], [class*="icon51"], [class*="icon52"], [class*="icon53"], ' +
+                '[id*="icon49"], [id*="icon50"], [id*="icon51"], [id*="icon52"], [id*="icon53"]'
+            );
+            if (direct) return true;
 
-            // Also search document for direct icon IDs or classes (e.g. icon49, icon44, icon39)
-            const directSelectors = [
-                '[id*="icon49"], [id*="icon50"], [id*="icon51"], [id*="icon52"], [id*="icon53"]',
-                '[class*="icon49"], [class*="icon50"], [class*="icon51"], [class*="icon52"], [class*="icon53"]',
-                '[id*="icon44"], [id*="icon45"], [id*="icon46"], [id*="icon47"], [id*="icon48"]',
-                '[class*="icon44"], [class*="icon45"], [class*="icon46"], [class*="icon47"], [class*="icon48"]',
-                '[id*="icon39"], [id*="icon40"], [id*="icon41"], [id*="icon42"], [id*="icon43"]',
-                '[class*="icon39"], [class*="icon40"], [class*="icon41"], [class*="icon42"], [class*="icon43"]'
-            ];
-            document.querySelectorAll(directSelectors.join(', ')).forEach(el => {
-                if (!iconElements.includes(el)) iconElements.push(el);
-            });
-
-            function parseTooltip(str) {
-                if (!str) return null;
-                const paren = str.match(/\(([^)]+)\)/);
-                if (paren) return paren[1].trim();
-                const colon = str.match(/:\s*([^)]+)/);
-                if (colon) return colon[1].trim();
-                return null;
+            // Check tooltip or aria labels for drug or cannabis
+            const candidates = sidebar.querySelectorAll('[class*="status-icons"] a, [class*="status-icons"] li, [class*="status-icons"] div, [aria-label*="Drug" i], [title*="Drug" i], [title*="Cannabis" i]');
+            for (const el of candidates) {
+                const txt = `${el.className || ''} ${el.getAttribute('title') || ''} ${el.getAttribute('aria-label') || ''}`.toLowerCase();
+                if (txt.includes('drug') || txt.includes('cannabis')) return true;
             }
-
-            for (const el of iconElements) {
-                const rawId = el.id || '';
-                const rawClass = el.className || '';
-                const title = el.getAttribute('title') || el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || el.getAttribute('alt') || '';
-                const combined = `${rawId} ${rawClass} ${title}`.toLowerCase();
-
-                // 1. Drug check (icons 49-53 or keyword drug/cannabis)
-                const drugMatch = combined.match(/icon(49|50|51|52|53)/) || (combined.includes('drug') && (combined.includes('cooldown') || combined.includes('icon')));
-                if (drugMatch) {
-                    res.drug.active = true;
-                    const num = drugMatch[1];
-                    const tip = parseTooltip(title);
-                    if (tip) res.drug.label = tip;
-                    else if (num === '49') res.drug.label = '< 10m';
-                    else if (num === '50') res.drug.label = '10-60m';
-                    else if (num === '51') res.drug.label = '1-2h';
-                    else if (num === '52') res.drug.label = '2-5h';
-                    else if (num === '53') res.drug.label = '> 5h';
-                    else res.drug.label = 'Active';
-                }
-
-                // 2. Medical check (icons 44-48 or keyword medical cooldown)
-                const medMatch = combined.match(/icon(44|45|46|47|48)/) || (combined.includes('medical') && (combined.includes('cooldown') || combined.includes('icon')));
-                if (medMatch) {
-                    res.medical.active = true;
-                    const num = medMatch[1];
-                    const tip = parseTooltip(title);
-                    if (tip) res.medical.label = tip;
-                    else if (num === '44') res.medical.label = '< 15m';
-                    else if (num === '45') res.medical.label = '15-60m';
-                    else if (num === '46') res.medical.label = '1-2h';
-                    else if (num === '47') res.medical.label = '2-4h';
-                    else if (num === '48') res.medical.label = '> 4h';
-                    else res.medical.label = 'Active';
-                }
-
-                // 3. Booster check (icons 39-43 or keyword booster cooldown)
-                const boosterMatch = combined.match(/icon(39|40|41|42|43)/) || (combined.includes('booster') && (combined.includes('cooldown') || combined.includes('icon')));
-                if (boosterMatch) {
-                    res.booster.active = true;
-                    const num = boosterMatch[1];
-                    const tip = parseTooltip(title);
-                    if (tip) res.booster.label = tip;
-                    else if (num === '39') res.booster.label = '< 6h';
-                    else if (num === '40') res.booster.label = '6-12h';
-                    else if (num === '41') res.booster.label = '12-18h';
-                    else if (num === '42') res.booster.label = '18-24h';
-                    else if (num === '43') res.booster.label = '> 24h';
-                    else res.booster.label = 'Active';
-                }
-            }
-        } catch (e) {
-            console.warn('[Stakeout] getCooldownsFromDom error:', e);
-        }
-
-        return res;
+        } catch (e) {}
+        return false;
     }
 
-    const cooldownState = {
-        drug: { remaining: 0, expiresAt: 0, alertFired: true },
-        medical: { remaining: 0, expiresAt: 0, alertFired: true },
-        booster: { remaining: 0, expiresAt: 0, alertFired: true },
-        lastSyncTime: 0,
-        isSyncing: false,
-        hasInitialized: false,
-        keyTier: 'unknown' // 'valid' | 'public' | 'invalid' | 'none'
-    };
+    function triggerDrugCooldownBell() {
+        drugAlertFired = true;
+        drugWasActive = false;
+        drugCooldownExpiresAt = 0;
 
-    async function syncCooldownsFromApi(force = false) {
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            cooldownState.keyTier = 'none';
-            if (force) promptSetApiKey();
-            updateCooldownBoxUI();
-            return;
-        }
-        const now = Date.now();
-        if (!force && now - cooldownState.lastSyncTime < 30000) return;
-        if (cooldownState.isSyncing) return;
-        if (getApiCallRate() >= 90) return;
+        if (!config.alertOnDrugCooldown) return;
 
-        cooldownState.isSyncing = true;
-        try {
-            recordApiCall();
-            const url = `https://api.torn.com/user/?selections=cooldowns,bars&key=${apiKey}&comment=StakeoutCooldowns&timestamp=${now}`;
-            const res = await fetch(url);
-            if (!res.ok) {
-                if (force) showStakeoutToast('⚠️ Network error connecting to Torn API.');
-                return;
-            }
-            const data = await res.json();
+        playStakeoutAlarm('bell');
 
-            if (data && data.error) {
-                console.warn('[Stakeout] Cooldown sync API error:', data.error);
-                if (data.error.code === 7 || data.error.code === 16) {
-                    cooldownState.keyTier = 'public';
-                    if (force) {
-                        showStakeoutToast('⚠️ Live second timers require a Minimal or Limited API Key (Current key is Public-only). Live DOM icon detection active.');
-                    }
-                } else if (data.error.code === 2) {
-                    cooldownState.keyTier = 'invalid';
-                    if (force) showStakeoutToast('⚠️ Invalid Torn API Key! Click ⚙ in Radar to update.');
-                }
-                updateCooldownBoxUI();
-                return;
-            }
-
-            if (data && (data.cooldowns || data.bars)) {
-                cooldownState.keyTier = 'valid';
-                const nowMs = Date.now();
-                if (data.cooldowns) {
-                    for (const key of ['drug', 'medical', 'booster']) {
-                        const sec = parseInt(data.cooldowns[key], 10) || 0;
-                        cooldownState[key].remaining = sec;
-                        cooldownState[key].expiresAt = sec > 0 ? (nowMs + sec * 1000) : 0;
-                        if (!cooldownState.hasInitialized) {
-                            cooldownState[key].alertFired = (sec === 0);
-                        } else if (sec > 0) {
-                            cooldownState[key].alertFired = false;
-                        }
-                    }
-                }
-                if (data.bars && data.bars.energy) {
-                    cachedApiEnergy = {
-                        current: parseInt(data.bars.energy.current, 10) || 0,
-                        maximum: parseInt(data.bars.energy.maximum, 10) || 0
-                    };
-                }
-                cooldownState.hasInitialized = true;
-                cooldownState.lastSyncTime = nowMs;
-                updateCooldownBoxUI();
-                if (force) showStakeoutToast('🔄 Live Cooldowns & Energy synced from Torn API.');
-            }
-        } catch (e) {
-            console.warn('[Stakeout] Cooldown sync failed:', e);
-            if (force) showStakeoutToast('⚠️ Cooldown sync failed: ' + (e.message || 'Network error'));
-        } finally {
-            cooldownState.isSyncing = false;
-        }
-    }
-
-    function triggerCooldownAlert(type) {
-        playStakeoutAlarm('cooldown');
-        const meta = {
-            drug: { label: 'Drug', icon: '💊', desc: 'Your drug cooldown has expired. You can take your next drug now!' },
-            medical: { label: 'Medical', icon: '💉', desc: 'Your medical cooldown has expired. Medical items are ready to use!' },
-            booster: { label: 'Booster', icon: '🍫', desc: 'Your booster cooldown has expired. Energy cans, alcohol & boosters are ready!' }
-        }[type] || { label: type, icon: '⏱️', desc: 'Cooldown ready!' };
+        showStakeoutToast('💊 Drug cooldown has ended! Ready to take another drug.');
 
         sendStakeoutNotification(
-            `${meta.icon} ${meta.label} Cooldown is Ready!`,
-            meta.desc
+            '💊 Drug Cooldown Ready!',
+            'Your drug cooldown has ended. You can now safely take another drug.'
         );
-        showStakeoutToast(`${meta.icon} ${meta.label} Cooldown is Ready!`);
     }
 
-    function tickCooldownsAndEnergy() {
-        // 1. Tick Energy
-        checkEnergyStatus();
+    function checkDrugCooldownStatus() {
+        if (!config.alertOnDrugCooldown) return;
 
-        // 2. Tick Cooldowns
         const nowMs = Date.now();
-        for (const key of ['drug', 'medical', 'booster']) {
-            const item = cooldownState[key];
-            if (item.expiresAt > 0) {
-                item.remaining = Math.max(0, Math.floor((item.expiresAt - nowMs) / 1000));
-                if (item.remaining === 0 && !item.alertFired) {
-                    item.alertFired = true;
-                    const shouldAlert = (key === 'drug' && config.alertOnDrugCooldown) ||
-                                        (key === 'medical' && config.alertOnMedCooldown) ||
-                                        (key === 'booster' && config.alertOnBoosterCooldown);
-                    if (shouldAlert) {
-                        triggerCooldownAlert(key);
-                    }
-                }
-            } else {
-                item.remaining = 0;
-            }
+        const domActive = isDrugActiveInDom();
+
+        if (domActive) {
+            drugWasActive = true;
+            drugAlertFired = false;
         }
 
-        // 3. Update Cooldown & Energy Box DOM
-        updateCooldownBoxUI();
+        // Check if API timer has expired
+        if (drugCooldownExpiresAt > 0) {
+            if (nowMs >= drugCooldownExpiresAt) {
+                triggerDrugCooldownBell();
+            }
+        } else if (drugWasActive && !drugAlertFired && !domActive) {
+            // Drug icon was active previously and has now cleared from sidebar
+            triggerDrugCooldownBell();
+        }
     }
 
-    function updateCooldownBoxUI() {
-        const box = document.getElementById('stakeout-cooldown-box');
-        if (!box) return;
+    async function syncDrugCooldownFromApi() {
+        const apiKey = getApiKey();
+        if (!apiKey) return;
+        const nowMs = Date.now();
+        if (nowMs - lastDrugApiSyncTime < 60000) return;
+        if (getApiCallRate() >= 90) return;
 
-        // 1. Update Energy (from DOM, with cached API fallback)
-        const energy = getPlayerEnergyFromDom();
-        const energyFill = document.getElementById('stakeout-energy-bar-fill');
-        const energyLabel = document.getElementById('stakeout-energy-label');
-        if (energy && energy.maximum > 0) {
-            const pct = Math.min(100, Math.max(0, (energy.current / energy.maximum) * 100));
-            if (energyFill) {
-                energyFill.style.width = `${pct}%`;
-                if (pct >= 100) energyFill.classList.add('full');
-                else energyFill.classList.remove('full');
-            }
-            if (energyLabel) {
-                energyLabel.textContent = `${energy.current} / ${energy.maximum} (${Math.round(pct)}%)`;
-                energyLabel.style.color = pct >= 100 ? '#4ade80' : '#f8fafc';
-            }
-        }
-
-        // 2. Update Cooldowns (Hybrid: Exact API Timer + Live DOM Status Icons + Remaining vs Cap)
-        const domCooldowns = getCooldownsFromDom();
-
-        const medCapHours = config.medicalCapHours || 6;
-        const boosterCapHours = config.boosterCapHours || 24;
-        const drugCapHours = config.drugCapHours || 8;
-
-        const caps = {
-            drug: { hours: drugCapHours, sec: drugCapHours * 3600, label: 'Cap: 0s' },
-            medical: { hours: medCapHours, sec: medCapHours * 3600, label: `Cap: ${medCapHours}h` },
-            booster: { hours: boosterCapHours, sec: boosterCapHours * 3600, label: `Cap: ${boosterCapHours}h` }
-        };
-
-        for (const key of ['drug', 'medical', 'booster']) {
-            const cardEl = document.getElementById(`stakeout-cd-${key}`);
-            const timeEl = document.getElementById(`stakeout-cd-time-${key}`);
-            const capLabelEl = document.getElementById(`stakeout-cd-cap-${key}`);
-            const subEl = document.getElementById(`stakeout-cd-sub-${key}`);
-            const barFillEl = document.getElementById(`stakeout-cd-bar-fill-${key}`);
-            if (!cardEl || !timeEl) continue;
-
-            const apiRem = cooldownState[key]?.remaining || 0;
-            const domInfo = domCooldowns[key];
-            const capInfo = caps[key];
-
-            if (capLabelEl) capLabelEl.textContent = capInfo.label;
-
-            if (apiRem > 0) {
-                // Priority 1: Exact live countdown seconds from API
-                timeEl.textContent = formatCountdown(apiRem);
-                cardEl.className = 'stakeout-cooldown-card active';
-                const pct = Math.min(100, Math.max(0, Math.round((apiRem / capInfo.sec) * 100)));
-                if (subEl) {
-                    subEl.textContent = `${formatShortHours(apiRem)} / ${capInfo.hours}h (${pct}%)`;
-                }
-                if (barFillEl) {
-                    barFillEl.style.width = `${pct}%`;
-                }
-            } else if (domInfo && domInfo.active) {
-                // Priority 2: Active icon detected in DOM (even if API key is Public-only or awaiting sync)
-                timeEl.textContent = domInfo.label || 'Active';
-                cardEl.className = 'stakeout-cooldown-card active';
-                if (subEl) {
-                    subEl.textContent = `Active / ${capInfo.hours}h`;
-                }
-                if (barFillEl) {
-                    barFillEl.style.width = '50%';
-                }
-            } else {
-                // Priority 3: Truly ready
-                timeEl.textContent = 'READY';
-                cardEl.className = 'stakeout-cooldown-card ready';
-                if (subEl) {
-                    subEl.textContent = (key === 'drug') ? 'Limit: 0:00 (No Stack)' : `0m / ${capInfo.hours}h (0%)`;
-                }
-                if (barFillEl) {
-                    barFillEl.style.width = '0%';
+        lastDrugApiSyncTime = nowMs;
+        try {
+            recordApiCall();
+            const url = `https://api.torn.com/user/?selections=cooldowns&key=${apiKey}&comment=StakeoutDrug&timestamp=${nowMs}`;
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data && data.cooldowns && typeof data.cooldowns.drug === 'number') {
+                const remSec = parseInt(data.cooldowns.drug, 10) || 0;
+                if (remSec > 0) {
+                    drugCooldownExpiresAt = Date.now() + remSec * 1000;
+                    drugWasActive = true;
+                    drugAlertFired = false;
+                } else {
+                    if (drugWasActive && !drugAlertFired) {
+                        triggerDrugCooldownBell();
+                    } else {
+                        drugAlertFired = true;
+                    }
+                    drugCooldownExpiresAt = 0;
                 }
             }
-        }
-
-        // 3. Update Key Tier Badge in Box Header if key is Public or Missing
-        const keyBadge = document.getElementById('stakeout-cd-key-badge');
-        if (keyBadge) {
-            if (cooldownState.keyTier === 'public') {
-                keyBadge.style.display = 'inline-block';
-                keyBadge.textContent = '⚠️ Minimal Key Req';
-                keyBadge.title = 'Your API key is Public-only. For exact second countdowns, enter a Minimal or Limited key from Torn Preferences > API Key. Click to configure.';
-                keyBadge.onclick = promptSetApiKey;
-            } else if (cooldownState.keyTier === 'none') {
-                keyBadge.style.display = 'inline-block';
-                keyBadge.textContent = '⚠️ Set Key';
-                keyBadge.title = 'No API key set. Click to configure Torn API Key.';
-                keyBadge.onclick = promptSetApiKey;
-            } else {
-                keyBadge.style.display = 'none';
-            }
-        }
-
-        // 4. Update Summary pill if collapsed
-        const summaryEl = document.getElementById('stakeout-cd-summary-pill');
-        if (summaryEl) {
-            const curEnergy = energy || cachedApiEnergy;
-            const eText = curEnergy ? `${curEnergy.current}/${curEnergy.maximum}E` : '--E';
-            const getCdPill = (k, icon, capH) => {
-                const rem = cooldownState[k]?.remaining || 0;
-                if (rem > 0) return `${icon} ${formatShortHours(rem)}/${capH}h`;
-                if (domCooldowns[k]?.active) return `${icon} ${domCooldowns[k].label}`;
-                return `${icon} Ready`;
-            };
-            const dText = getCdPill('drug', '💊', caps.drug.hours);
-            const mText = getCdPill('medical', '💉', caps.medical.hours);
-            const bText = getCdPill('booster', '🍫', caps.booster.hours);
-            summaryEl.textContent = `⚡ ${eText} • ${dText} • ${mText} • ${bText}`;
+        } catch (e) {
+            console.warn('[Stakeout] Drug cooldown sync error:', e);
         }
     }
 
@@ -1857,126 +1585,6 @@
             cursor: pointer;
         }
 
-        .stakeout-cooldown-box {
-            background: rgba(15, 23, 42, 0.85);
-            border: 1px solid #334155;
-            border-radius: 6px;
-            padding: 7px 9px;
-            margin-bottom: 6px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        .stakeout-cooldown-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 11px;
-            font-weight: 800;
-            color: #f8fafc;
-        }
-        .stakeout-energy-row {
-            display: flex;
-            flex-direction: column;
-            gap: 1px;
-        }
-        .stakeout-energy-bar-wrap {
-            height: 12px;
-            background: #1e293b;
-            border-radius: 4px;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid #334155;
-        }
-        .stakeout-energy-bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
-            transition: width 0.3s ease;
-        }
-        .stakeout-energy-bar-fill.full {
-            background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-        }
-        .stakeout-cooldowns-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 5px;
-        }
-        .stakeout-cooldown-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 5px;
-            padding: 5px 6px;
-            text-align: left;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            transition: all 0.2s ease;
-        }
-        .stakeout-cooldown-card.ready {
-            border-color: #22c55e;
-            background: rgba(34, 197, 94, 0.08);
-        }
-        .stakeout-cooldown-card.active {
-            border-color: #f59e0b;
-            background: rgba(245, 158, 11, 0.08);
-        }
-        .stakeout-cd-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .stakeout-cd-title {
-            font-size: 9.5px;
-            font-weight: 700;
-            color: #94a3b8;
-        }
-        .stakeout-cd-cap-label {
-            font-size: 8.5px;
-            font-weight: 600;
-            font-family: monospace, monospace;
-            color: #94a3b8;
-        }
-        .stakeout-cd-time {
-            font-size: 11px;
-            font-weight: 800;
-            font-family: monospace, monospace;
-            color: #f8fafc;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .stakeout-cooldown-card.ready .stakeout-cd-time {
-            color: #4ade80;
-        }
-        .stakeout-cooldown-card.active .stakeout-cd-time {
-            color: #fbbf24;
-        }
-        .stakeout-cd-sub {
-            font-size: 8.5px;
-            font-family: monospace, monospace;
-            color: #94a3b8;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .stakeout-cd-bar-wrap {
-            width: 100%;
-            height: 3px;
-            background: #0f172a;
-            border-radius: 2px;
-            overflow: hidden;
-            margin-top: 1px;
-        }
-        .stakeout-cd-bar-fill {
-            height: 100%;
-            border-radius: 2px;
-            transition: width 0.3s ease;
-            background: #22c55e;
-        }
-        .stakeout-cooldown-card.active .stakeout-cd-bar-fill {
-            background: linear-gradient(90deg, #f59e0b, #ef4444);
-        }
 
         .stakeout-settings {
             background: #0f172a;
@@ -2129,79 +1737,13 @@
                     </div>
                 </div>
 
-                <!-- SEPARATE FEATURE BOX: Personal Vitality & Cooldown Alerts -->
-                <div class="stakeout-cooldown-box" id="stakeout-cooldown-box">
-                    <div class="stakeout-cooldown-header">
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span style="color: #f59e0b;">⚡</span>
-                            <span>Vitality & Cooldowns</span>
-                            <span id="stakeout-cd-key-badge" style="display: none; font-size: 9px; color: #f59e0b; cursor: pointer; padding: 1px 4px; border: 1px dashed #f59e0b; border-radius: 3px;"></span>
-                            ${config.isCooldownBoxCollapsed ? '<span id="stakeout-cd-summary-pill" style="font-size: 9.5px; color: #38bdf8; font-weight: 600; margin-left: 4px;"></span>' : ''}
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                            <button class="stakeout-btn-icon" id="stakeout-btn-sync-cd" style="padding: 1px 5px; font-size: 10px;" title="Sync live cooldowns from Torn API">🔄</button>
-                            <button class="stakeout-btn-icon" id="stakeout-btn-collapse-cd" style="padding: 1px 5px; font-size: 10px;" title="Collapse/Expand Cooldown Box">
-                                ${config.isCooldownBoxCollapsed ? '▼' : '▲'}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="stakeout-cooldown-body" style="display: ${config.isCooldownBoxCollapsed ? 'none' : 'flex'}; flex-direction: column; gap: 6px;">
-                        <div class="stakeout-energy-row">
-                            <div style="display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 2px;">
-                                <span style="color: #94a3b8; font-weight: 700;">⚡ Energy</span>
-                                <span id="stakeout-energy-label" style="font-weight: 800; font-family: monospace;">-- / --</span>
-                            </div>
-                            <div class="stakeout-energy-bar-wrap">
-                                <div id="stakeout-energy-bar-fill" class="stakeout-energy-bar-fill" style="width: 0%;"></div>
-                            </div>
-                        </div>
-
-                        <div class="stakeout-cooldowns-grid">
-                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-drug" title="Drug Cooldown (No stacking, hard 0s limit)">
-                                <div class="stakeout-cd-header">
-                                    <span class="stakeout-cd-title">💊 Drug</span>
-                                    <span class="stakeout-cd-cap-label" id="stakeout-cd-cap-drug">Cap: 0s</span>
-                                </div>
-                                <div class="stakeout-cd-time" id="stakeout-cd-time-drug">READY</div>
-                                <div class="stakeout-cd-sub" id="stakeout-cd-sub-drug">Limit: 0:00 (No Stack)</div>
-                                <div class="stakeout-cd-bar-wrap">
-                                    <div class="stakeout-cd-bar-fill" id="stakeout-cd-bar-fill-drug" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-medical" title="Medical Cooldown (Base 6h cap, stacks up to 24h with faction perks)">
-                                <div class="stakeout-cd-header">
-                                    <span class="stakeout-cd-title">💉 Medical</span>
-                                    <span class="stakeout-cd-cap-label" id="stakeout-cd-cap-medical">Cap: ${config.medicalCapHours || 6}h</span>
-                                </div>
-                                <div class="stakeout-cd-time" id="stakeout-cd-time-medical">READY</div>
-                                <div class="stakeout-cd-sub" id="stakeout-cd-sub-medical">0m / ${config.medicalCapHours || 6}h (0%)</div>
-                                <div class="stakeout-cd-bar-wrap">
-                                    <div class="stakeout-cd-bar-fill" id="stakeout-cd-bar-fill-medical" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-booster" title="Booster Cooldown (Base 24h cap, stacks up to 48h with faction perks)">
-                                <div class="stakeout-cd-header">
-                                    <span class="stakeout-cd-title">🍫 Booster</span>
-                                    <span class="stakeout-cd-cap-label" id="stakeout-cd-cap-booster">Cap: ${config.boosterCapHours || 24}h</span>
-                                </div>
-                                <div class="stakeout-cd-time" id="stakeout-cd-time-booster">READY</div>
-                                <div class="stakeout-cd-sub" id="stakeout-cd-sub-booster">0m / ${config.boosterCapHours || 24}h (0%)</div>
-                                <div class="stakeout-cd-bar-wrap">
-                                    <div class="stakeout-cd-bar-fill" id="stakeout-cd-bar-fill-booster" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="stakeout-add-bar">
                     <input type="text" class="stakeout-input" id="stakeout-input-target" placeholder="Enter Player ID or Profile URL..." />
                     <button class="stakeout-btn-primary" id="stakeout-btn-add">+ Add</button>
                 </div>
 
                 <div id="stakeout-settings-panel" class="stakeout-settings" style="display: none;">
-                    <div style="font-weight: 800; color: #f8fafc; margin-bottom: 2px;">🎯 Mercenary Stakeout Triggers:</div>
+                    <div style="font-weight: 800; color: #f8fafc; margin-bottom: 2px;">⚡ Stakeout Trigger Toggles:</div>
                     <label class="stakeout-toggle-row" title="Requires target to meet BOTH criteria: 1. Out & Alive, and 2. Online or last action within configured limit">
                         <span>⚔️ Alert on Attack Eligible (Out & Active)</span>
                         <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
@@ -2232,42 +1774,14 @@
                         <span>Alert on Full 100% HP</span>
                         <input type="checkbox" id="toggle-alert-fullhp" ${config.alertOnFullHp ? 'checked' : ''} />
                     </label>
-
-                    <div style="border-top: 1px solid #334155; margin-top: 4px; padding-top: 6px;">
-                        <div style="font-weight: 800; color: #f8fafc; margin-bottom: 2px;">⚡ Personal Vitality & Cooldown Alerts:</div>
-                        <label class="stakeout-toggle-row" title="Plays a melodic golden bell chime when your Energy reaches 100% capacity">
-                            <span>🔔 Alert on 100% Full Energy</span>
-                            <input type="checkbox" id="toggle-alert-fullenergy" ${config.alertOnFullEnergy ? 'checked' : ''} />
-                        </label>
-                        <label class="stakeout-toggle-row" title="Plays a chime and notifies you when your Drug cooldown reaches 0s (Ready)">
-                            <span>💊 Alert on Drug Cooldown Ready</span>
-                            <input type="checkbox" id="toggle-alert-drug" ${config.alertOnDrugCooldown ? 'checked' : ''} />
-                        </label>
-                        <label class="stakeout-toggle-row" title="Plays a chime and notifies you when your Medical cooldown reaches 0s (Ready)">
-                            <span>💉 Alert on Medical Cooldown Ready</span>
-                            <input type="checkbox" id="toggle-alert-med" ${config.alertOnMedCooldown ? 'checked' : ''} />
-                        </label>
-                        <label class="stakeout-toggle-row" title="Plays a chime and notifies you when your Booster cooldown reaches 0s (Ready)">
-                            <span>🍫 Alert on Booster Cooldown Ready</span>
-                            <input type="checkbox" id="toggle-alert-booster" ${config.alertOnBoosterCooldown ? 'checked' : ''} />
-                        </label>
-                        <label class="stakeout-toggle-row" title="Configure your faction Medical Cooldown Cap (Base 6h; up to 24h with Fortitude perks)">
-                            <span>💉 Medical Cooldown Cap</span>
-                            <select id="stakeout-med-cap-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
-                                <option value="6" ${(config.medicalCapHours || 6) === 6 ? 'selected' : ''}>6 Hours (Base Cap)</option>
-                                <option value="12" ${(config.medicalCapHours || 6) === 12 ? 'selected' : ''}>12 Hours (Perk)</option>
-                                <option value="18" ${(config.medicalCapHours || 6) === 18 ? 'selected' : ''}>18 Hours (Perk)</option>
-                                <option value="24" ${(config.medicalCapHours || 6) === 24 ? 'selected' : ''}>24 Hours (Max Perk)</option>
-                            </select>
-                        </label>
-                        <label class="stakeout-toggle-row" title="Configure your faction Booster Cooldown Cap (Base 24h; up to 48h with Voracity perks)">
-                            <span>🍫 Booster Cooldown Cap</span>
-                            <select id="stakeout-booster-cap-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
-                                <option value="24" ${(config.boosterCapHours || 24) === 24 ? 'selected' : ''}>24 Hours (Base Cap)</option>
-                                <option value="48" ${(config.boosterCapHours || 24) === 48 ? 'selected' : ''}>48 Hours (Max Perk)</option>
-                            </select>
-                        </label>
-                    </div>
+                    <label class="stakeout-toggle-row" title="Plays a melodic golden bell chime when your Energy reaches 100% while waiting for hospital targets, so you can train off energy without capping">
+                        <span>🔔 Energy Full Bell (Train Reminder)</span>
+                        <input type="checkbox" id="toggle-alert-fullenergy" ${config.alertOnFullEnergy ? 'checked' : ''} />
+                    </label>
+                    <label class="stakeout-toggle-row" title="Plays a melodic bell chime and notifies you when your Drug cooldown reaches 0:00 (Ready to take another drug)">
+                        <span>💊 Drug Cooldown Bell</span>
+                        <input type="checkbox" id="toggle-alert-drug" ${config.alertOnDrugCooldown ? 'checked' : ''} />
+                    </label>
 
                     <label class="stakeout-toggle-row" style="margin-top: 4px;">
                         <span>Audio Sound Alarm</span>
@@ -2319,8 +1833,7 @@
 
                     <div style="display: flex; gap: 4px; margin-top: 4px;">
                         <button class="stakeout-btn-icon" id="stakeout-btn-test-sound" style="flex: 1; padding: 4px;" title="Test Attack Siren Alarm">🔊 Siren</button>
-                        <button class="stakeout-btn-icon" id="stakeout-btn-test-bell" style="flex: 1; padding: 4px; border-color: #f59e0b; color: #fbbf24;" title="Test Full Energy Golden Bell">🔔 Bell</button>
-                        <button class="stakeout-btn-icon" id="stakeout-btn-test-cooldown" style="flex: 1; padding: 4px; border-color: #a855f7; color: #c084fc;" title="Test Cooldown Ready Chime">💊 Cooldown</button>
+                        <button class="stakeout-btn-icon" id="stakeout-btn-test-bell" style="flex: 1; padding: 4px; border-color: #f59e0b; color: #fbbf24;" title="Test Melodic Bell Chime">🔔 Bell</button>
                         <button class="stakeout-btn-icon" id="stakeout-btn-check-update" style="flex: 1; padding: 4px; border-color: #38bdf8; color: #38bdf8;" title="Check GitHub for Updates">🔄 Updates</button>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-top: 2px;">
@@ -2358,18 +1871,6 @@
         if (settingsBtn && settingsPanel) {
             settingsBtn.onclick = () => {
                 settingsPanel.style.display = settingsPanel.style.display === 'none' ? 'flex' : 'none';
-            };
-        }
-
-        const syncCdBtn = document.getElementById('stakeout-btn-sync-cd');
-        if (syncCdBtn) syncCdBtn.onclick = () => syncCooldownsFromApi(true);
-
-        const collapseCdBtn = document.getElementById('stakeout-btn-collapse-cd');
-        if (collapseCdBtn) {
-            collapseCdBtn.onclick = () => {
-                config.isCooldownBoxCollapsed = !config.isCooldownBoxCollapsed;
-                saveConfig();
-                renderRadarUI();
             };
         }
 
@@ -2417,43 +1918,7 @@
             tDrug.onchange = (e) => {
                 config.alertOnDrugCooldown = e.target.checked;
                 saveConfig();
-                if (e.target.checked) playStakeoutAlarm('cooldown');
-            };
-        }
-
-        const tMed = document.getElementById('toggle-alert-med');
-        if (tMed) {
-            tMed.onchange = (e) => {
-                config.alertOnMedCooldown = e.target.checked;
-                saveConfig();
-                if (e.target.checked) playStakeoutAlarm('cooldown');
-            };
-        }
-
-        const tBooster = document.getElementById('toggle-alert-booster');
-        if (tBooster) {
-            tBooster.onchange = (e) => {
-                config.alertOnBoosterCooldown = e.target.checked;
-                saveConfig();
-                if (e.target.checked) playStakeoutAlarm('cooldown');
-            };
-        }
-
-        const medCapSelect = document.getElementById('stakeout-med-cap-select');
-        if (medCapSelect) {
-            medCapSelect.onchange = (e) => {
-                config.medicalCapHours = parseInt(e.target.value, 10) || 6;
-                saveConfig();
-                updateCooldownBoxUI();
-            };
-        }
-
-        const boosterCapSelect = document.getElementById('stakeout-booster-cap-select');
-        if (boosterCapSelect) {
-            boosterCapSelect.onchange = (e) => {
-                config.boosterCapHours = parseInt(e.target.value, 10) || 24;
-                saveConfig();
-                updateCooldownBoxUI();
+                if (e.target.checked) playStakeoutAlarm('bell');
             };
         }
 
@@ -2515,9 +1980,6 @@
         const testBellBtn = document.getElementById('stakeout-btn-test-bell');
         if (testBellBtn) testBellBtn.onclick = () => playStakeoutAlarm('bell');
 
-        const testCdBtn = document.getElementById('stakeout-btn-test-cooldown');
-        if (testCdBtn) testCdBtn.onclick = () => playStakeoutAlarm('cooldown');
-
         const checkUpdateBtn = document.getElementById('stakeout-btn-check-update');
         if (checkUpdateBtn) checkUpdateBtn.onclick = () => checkForScriptUpdates(true);
 
@@ -2560,8 +2022,6 @@
                 updateTargetCardUI(id);
             });
         }
-
-        updateCooldownBoxUI();
     }
 
     function updateRadarBadge() {
@@ -3071,18 +2531,19 @@
         renderRadarUI();
         updateProfilePageButton();
 
-        // Safe 1-second ticker for target UI, cooldowns, vitality & dynamic poll frequency
+        // Safe 1-second ticker for target UI, energy alert, drug cooldown alert & dynamic poll frequency
         setInterval(() => {
-            tickCooldownsAndEnergy();
+            checkEnergyStatus();
+            checkDrugCooldownStatus();
             checkAndAdjustPollingInterval();
             updateDockFooterRate();
             if (config.isMinimized || watchlist.length === 0) return;
             watchlist.forEach(id => updateTargetCardUI(id));
         }, 1000);
 
-        // Initial cooldowns fetch and periodic sync every 30s
-        setTimeout(() => syncCooldownsFromApi(false), 1200);
-        setInterval(() => syncCooldownsFromApi(false), 30000);
+        // Initial drug cooldown check and periodic background sync (every 60s)
+        setTimeout(() => syncDrugCooldownFromApi(), 1500);
+        setInterval(() => syncDrugCooldownFromApi(), 60000);
 
         // Safe 2-second checker for profile button without any MutationObserver
         setInterval(() => {

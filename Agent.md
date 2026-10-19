@@ -3239,3 +3239,35 @@ Extracted directly via Torn API stock market endpoints:
     - Executed automated test suite `verify_v119.js` (9/9 checks passed with 100% success).
   - **Date & Time**: 2026-10-19 16:35:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 129
+- **Focus**: Reverting Cooldowns Feature Box UI, Streamlining Stakeout Radar, and Implementing Lightweight Background Drug Cooldown Bell (`torn_mercenary_stakeout.user.js` v1.20) — Eliminating Medical/Booster/Drug UI Cards and Gauges, Restoring Compact Stakeout Radar Dock, and Adding Zero-Overhead Drug Cooldown Bell Chime.
+  - **User Directive**:
+    - "actually i dont need these latest edits revert to before we implemented ui for medical and booster and drug, at most implement a little bell when drug cools down will suffice"
+  - **Architectural & Design Decisions**:
+    1. *Complete Elimination of Cooldowns Feature Box UI*:
+       - Removed `#stakeout-cooldown-box`, the vitality energy bar container, and the 3 cooldown cards (Drug, Medical, Booster).
+       - Removed all associated CSS rules (`.stakeout-cooldown-box`, `.stakeout-cooldown-header`, `.stakeout-energy-row`, `.stakeout-energy-bar-*`, `.stakeout-cooldowns-grid`, `.stakeout-cooldown-card`, `.stakeout-cd-*`).
+       - Removed Medical Cap and Booster Cap settings selectors from the settings drawer (`⚙`).
+       - Restored the clean, streamlined Stakeout Radar dock interface: Header (Radar title, Scan/Pause status, controls), Target Add bar, Target Cards list, and Dock Footer rate display.
+    2. *Lightweight Background Drug Cooldown Bell Monitor*:
+       - Zero UI footprint: runs completely in the background without cluttering the screen or target surveillance.
+       - **Dual-Tier Detection Mechanism**:
+         - Tier 1 (DOM Status Icons - Zero API Quota): Continuously inspects `#sidebarroot` for Torn drug icons (`icon49` through `icon53`, or elements with tooltip/aria matching `drug` / `cannabis`). When an active drug icon is present, sets `drugWasActive = true` and primes `drugAlertFired = false`.
+         - Tier 2 (Torn API Timer Ground Truth): Periodically queries `cooldowns.drug` (every 60s), capturing exact expiration timestamp `drugCooldownExpiresAt`.
+       - **Edge-Triggered Bell Chime (`triggerDrugCooldownBell()`)**:
+         - When timer hits 0:00 or drug icon clears from the sidebar:
+           - Plays the pleasant golden bell chime (`playStakeoutAlarm('bell')` - dual strike E6/C6 melodic bell).
+           - Displays in-game toast: `"💊 Drug cooldown has ended! Ready to take another drug."`
+           - Dispatches persistent desktop notification.
+         - Edge-trigger guard: Initialized to `drugAlertFired = true` on initial boot so that players not currently on drugs do not receive nuisance chimes on page reloads.
+       - **Settings Drawer Control**:
+         - Added clean toggle in Settings (`⚙`): `<span>💊 Drug Cooldown Bell</span>` (default `true`).
+         - Preview: clicking `🔔 Bell` in the test buttons row plays the chime for easy volume and sound verification.
+    3. *Preservation of Full Energy Bell*:
+       - Preserved `🔔 Energy Full Bell (Train Reminder)` from v1.15/v1.16 as a clean background check with ground truth DOM text extraction (`normalizeEnergy` fixes the 15000 max denominator without needing any UI elements).
+  - **Verification**:
+    - `node --check torn_mercenary_stakeout.user.js torn_mercenary_stakeout.meta.js` (exit code 0).
+    - Executed automated test suite `verify_v120.js` (6/6 checks passed with 100% success).
+  - **Date & Time**: 2026-10-19 17:25:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
