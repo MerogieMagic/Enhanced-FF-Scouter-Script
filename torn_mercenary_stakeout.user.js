@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.18
+// @version      1.19
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.18";
+    const SCRIPT_VERSION = "1.19";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -294,6 +294,9 @@
         alertOnDrugCooldown: true,  // 💊 Alert when Drug cooldown reaches 0s (Ready)
         alertOnMedCooldown: true,   // 💉 Alert when Medical cooldown reaches 0s (Ready)
         alertOnBoosterCooldown: true, // 🍫 Alert when Booster cooldown reaches 0s (Ready)
+        medicalCapHours: 6,         // Base 6h (up to 24h with faction perks)
+        boosterCapHours: 24,        // Base 24h (up to 48h with faction perks)
+        drugCapHours: 8,            // Standard single drug max duration (e.g. Xanax 8h)
         isCooldownBoxCollapsed: false, // Collapse/expand state of the Cooldown & Energy box
         attackDestination: 'attack', // 'attack' (Direct sid=attack) | 'profile' (User Profile for double confirm)
         soundAlarm: true,
@@ -835,9 +838,28 @@
 
     let cachedApiEnergy = null;
 
+    function normalizeEnergy(rawCurr, rawMax) {
+        let c = parseInt(String(rawCurr).replace(/,/g, ''), 10);
+        let m = parseInt(String(rawMax).replace(/,/g, ''), 10);
+        if (isNaN(c) || isNaN(m)) return null;
+
+        // Fix Torn SVG coordinate / percentage scaling (e.g. 15000 or 10000)
+        if (m > 500 && m % 100 === 0) {
+            m = m / 100;
+            if (c > 500 && c % 100 === 0) {
+                c = c / 100;
+            }
+        } else if (m > 500) {
+            m = Math.round(m / 100);
+            if (c > 500) c = Math.round(c / 100);
+        }
+
+        if (m <= 0) return null;
+        return { current: c, maximum: m };
+    }
+
     function getPlayerEnergyFromDom() {
         try {
-            // Tier 1: Check elements inside #sidebarroot or document with energy classes/attributes
             const sidebar = document.getElementById('sidebarroot') || document.body;
             const energySelectors = [
                 '#sidebarroot [class*="energy"]',
@@ -849,63 +871,56 @@
                 '[aria-label*="Energy" i]'
             ];
 
+            // Priority 1 (Ground Truth): Visible text in energy elements (e.g. "Energy: 135/150 00:21")
             for (const sel of energySelectors) {
                 const els = document.querySelectorAll(sel);
                 for (const el of els) {
-                    // Try aria attributes
-                    const ariaNow = el.getAttribute('aria-valuenow');
-                    const ariaMax = el.getAttribute('aria-valuemax');
-                    if (ariaNow !== null && ariaMax !== null) {
-                        const curr = parseInt(ariaNow, 10);
-                        const max = parseInt(ariaMax, 10);
-                        if (!isNaN(curr) && !isNaN(max) && max > 0) {
-                            return { current: curr, maximum: max };
-                        }
-                    }
-
-                    // Try text content inside element
                     const text = el.textContent || '';
                     const m = text.match(/(?:Energy:?\s*)?(\d[\d,]*)\s*\/\s*(\d[\d,]*)/i);
                     if (m) {
-                        const curr = parseInt(m[1].replace(/,/g, ''), 10);
-                        const max = parseInt(m[2].replace(/,/g, ''), 10);
-                        if (!isNaN(curr) && !isNaN(max) && max > 0) {
-                            return { current: curr, maximum: max };
-                        }
+                        const norm = normalizeEnergy(m[1], m[2]);
+                        if (norm) return norm;
                     }
                 }
             }
 
-            // Tier 2: Direct scan of entire #sidebarroot text (matching "Energy: 135/150 00:21")
+            // Priority 2: Direct scan of entire #sidebarroot text
             const sidebarText = sidebar.innerText || sidebar.textContent || '';
             const sm = sidebarText.match(/Energy:?\s*(\d[\d,]*)\s*\/\s*(\d[\d,]*)/i);
             if (sm) {
-                const curr = parseInt(sm[1].replace(/,/g, ''), 10);
-                const max = parseInt(sm[2].replace(/,/g, ''), 10);
-                if (!isNaN(curr) && !isNaN(max) && max > 0) {
-                    return { current: curr, maximum: max };
+                const norm = normalizeEnergy(sm[1], sm[2]);
+                if (norm) return norm;
+            }
+
+            // Priority 3: Aria attributes with normalization (guarantees 15000 -> 150)
+            for (const sel of energySelectors) {
+                const els = document.querySelectorAll(sel);
+                for (const el of els) {
+                    const ariaNow = el.getAttribute('aria-valuenow');
+                    const ariaMax = el.getAttribute('aria-valuemax');
+                    if (ariaNow !== null && ariaMax !== null) {
+                        const norm = normalizeEnergy(ariaNow, ariaMax);
+                        if (norm) return norm;
+                    }
                 }
             }
 
-            // Tier 3: Global body text scan fallback
+            // Priority 4: Global body text scan fallback
             if (document.body && document.body !== sidebar) {
                 const bodyText = document.body.innerText || '';
                 const bm = bodyText.match(/Energy:?\s*(\d[\d,]*)\s*\/\s*(\d[\d,]*)/i);
                 if (bm) {
-                    const curr = parseInt(bm[1].replace(/,/g, ''), 10);
-                    const max = parseInt(bm[2].replace(/,/g, ''), 10);
-                    if (!isNaN(curr) && !isNaN(max) && max > 0) {
-                        return { current: curr, maximum: max };
-                    }
+                    const norm = normalizeEnergy(bm[1], bm[2]);
+                    if (norm) return norm;
                 }
             }
         } catch (e) {
             console.warn('[Stakeout] getPlayerEnergyFromDom error:', e);
         }
 
-        // Tier 4: Cached API Energy Fallback
+        // Priority 5: Cached API Energy Fallback
         if (cachedApiEnergy && cachedApiEnergy.maximum > 0) {
-            return cachedApiEnergy;
+            return normalizeEnergy(cachedApiEnergy.current, cachedApiEnergy.maximum);
         }
 
         return null;
@@ -1077,7 +1092,7 @@
             return;
         }
         const now = Date.now();
-        if (!force && now - cooldownState.lastSyncTime < 60000) return;
+        if (!force && now - cooldownState.lastSyncTime < 30000) return;
         if (cooldownState.isSyncing) return;
         if (getApiCallRate() >= 90) return;
 
@@ -1205,29 +1220,64 @@
             }
         }
 
-        // 2. Update Cooldowns (Hybrid: Exact API Timer + Live DOM Status Icons)
+        // 2. Update Cooldowns (Hybrid: Exact API Timer + Live DOM Status Icons + Remaining vs Cap)
         const domCooldowns = getCooldownsFromDom();
+
+        const medCapHours = config.medicalCapHours || 6;
+        const boosterCapHours = config.boosterCapHours || 24;
+        const drugCapHours = config.drugCapHours || 8;
+
+        const caps = {
+            drug: { hours: drugCapHours, sec: drugCapHours * 3600, label: 'Cap: 0s' },
+            medical: { hours: medCapHours, sec: medCapHours * 3600, label: `Cap: ${medCapHours}h` },
+            booster: { hours: boosterCapHours, sec: boosterCapHours * 3600, label: `Cap: ${boosterCapHours}h` }
+        };
 
         for (const key of ['drug', 'medical', 'booster']) {
             const cardEl = document.getElementById(`stakeout-cd-${key}`);
             const timeEl = document.getElementById(`stakeout-cd-time-${key}`);
+            const capLabelEl = document.getElementById(`stakeout-cd-cap-${key}`);
+            const subEl = document.getElementById(`stakeout-cd-sub-${key}`);
+            const barFillEl = document.getElementById(`stakeout-cd-bar-fill-${key}`);
             if (!cardEl || !timeEl) continue;
 
             const apiRem = cooldownState[key]?.remaining || 0;
             const domInfo = domCooldowns[key];
+            const capInfo = caps[key];
+
+            if (capLabelEl) capLabelEl.textContent = capInfo.label;
 
             if (apiRem > 0) {
                 // Priority 1: Exact live countdown seconds from API
                 timeEl.textContent = formatCountdown(apiRem);
                 cardEl.className = 'stakeout-cooldown-card active';
+                const pct = Math.min(100, Math.max(0, Math.round((apiRem / capInfo.sec) * 100)));
+                if (subEl) {
+                    subEl.textContent = `${formatShortHours(apiRem)} / ${capInfo.hours}h (${pct}%)`;
+                }
+                if (barFillEl) {
+                    barFillEl.style.width = `${pct}%`;
+                }
             } else if (domInfo && domInfo.active) {
                 // Priority 2: Active icon detected in DOM (even if API key is Public-only or awaiting sync)
                 timeEl.textContent = domInfo.label || 'Active';
                 cardEl.className = 'stakeout-cooldown-card active';
+                if (subEl) {
+                    subEl.textContent = `Active / ${capInfo.hours}h`;
+                }
+                if (barFillEl) {
+                    barFillEl.style.width = '50%';
+                }
             } else {
                 // Priority 3: Truly ready
                 timeEl.textContent = 'READY';
                 cardEl.className = 'stakeout-cooldown-card ready';
+                if (subEl) {
+                    subEl.textContent = (key === 'drug') ? 'Limit: 0:00 (No Stack)' : `0m / ${capInfo.hours}h (0%)`;
+                }
+                if (barFillEl) {
+                    barFillEl.style.width = '0%';
+                }
             }
         }
 
@@ -1253,17 +1303,17 @@
         const summaryEl = document.getElementById('stakeout-cd-summary-pill');
         if (summaryEl) {
             const curEnergy = energy || cachedApiEnergy;
-            const eText = curEnergy ? `${curEnergy.current}E` : '--E';
-            const getCdPill = (k, icon) => {
+            const eText = curEnergy ? `${curEnergy.current}/${curEnergy.maximum}E` : '--E';
+            const getCdPill = (k, icon, capH) => {
                 const rem = cooldownState[k]?.remaining || 0;
-                if (rem > 0) return `${icon} ${formatCountdown(rem)}`;
+                if (rem > 0) return `${icon} ${formatShortHours(rem)}/${capH}h`;
                 if (domCooldowns[k]?.active) return `${icon} ${domCooldowns[k].label}`;
                 return `${icon} Ready`;
             };
-            const dText = getCdPill('drug', '💊');
-            const mText = getCdPill('medical', '💉');
-            const bText = getCdPill('booster', '🍫');
-            summaryEl.textContent = `${eText} • ${dText} • ${mText} • ${bText}`;
+            const dText = getCdPill('drug', '💊', caps.drug.hours);
+            const mText = getCdPill('medical', '💉', caps.medical.hours);
+            const bText = getCdPill('booster', '🍫', caps.booster.hours);
+            summaryEl.textContent = `⚡ ${eText} • ${dText} • ${mText} • ${bText}`;
         }
     }
 
@@ -1856,24 +1906,35 @@
             background: #1e293b;
             border: 1px solid #334155;
             border-radius: 5px;
-            padding: 4px 4px;
-            text-align: center;
+            padding: 5px 6px;
+            text-align: left;
             display: flex;
             flex-direction: column;
-            gap: 1px;
+            gap: 2px;
             transition: all 0.2s ease;
         }
         .stakeout-cooldown-card.ready {
             border-color: #22c55e;
-            background: rgba(34, 197, 94, 0.1);
+            background: rgba(34, 197, 94, 0.08);
         }
         .stakeout-cooldown-card.active {
             border-color: #f59e0b;
             background: rgba(245, 158, 11, 0.08);
         }
+        .stakeout-cd-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
         .stakeout-cd-title {
             font-size: 9.5px;
             font-weight: 700;
+            color: #94a3b8;
+        }
+        .stakeout-cd-cap-label {
+            font-size: 8.5px;
+            font-weight: 600;
+            font-family: monospace, monospace;
             color: #94a3b8;
         }
         .stakeout-cd-time {
@@ -1881,12 +1942,40 @@
             font-weight: 800;
             font-family: monospace, monospace;
             color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .stakeout-cooldown-card.ready .stakeout-cd-time {
             color: #4ade80;
         }
         .stakeout-cooldown-card.active .stakeout-cd-time {
             color: #fbbf24;
+        }
+        .stakeout-cd-sub {
+            font-size: 8.5px;
+            font-family: monospace, monospace;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .stakeout-cd-bar-wrap {
+            width: 100%;
+            height: 3px;
+            background: #0f172a;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 1px;
+        }
+        .stakeout-cd-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            background: #22c55e;
+        }
+        .stakeout-cooldown-card.active .stakeout-cd-bar-fill {
+            background: linear-gradient(90deg, #f59e0b, #ef4444);
         }
 
         .stakeout-settings {
@@ -2069,17 +2158,38 @@
                         </div>
 
                         <div class="stakeout-cooldowns-grid">
-                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-drug" title="Drug Cooldown">
-                                <div class="stakeout-cd-title">💊 Drug</div>
-                                <div class="stakeout-cd-time" id="stakeout-cd-time-drug">Ready</div>
+                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-drug" title="Drug Cooldown (No stacking, hard 0s limit)">
+                                <div class="stakeout-cd-header">
+                                    <span class="stakeout-cd-title">💊 Drug</span>
+                                    <span class="stakeout-cd-cap-label" id="stakeout-cd-cap-drug">Cap: 0s</span>
+                                </div>
+                                <div class="stakeout-cd-time" id="stakeout-cd-time-drug">READY</div>
+                                <div class="stakeout-cd-sub" id="stakeout-cd-sub-drug">Limit: 0:00 (No Stack)</div>
+                                <div class="stakeout-cd-bar-wrap">
+                                    <div class="stakeout-cd-bar-fill" id="stakeout-cd-bar-fill-drug" style="width: 0%;"></div>
+                                </div>
                             </div>
-                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-medical" title="Medical Cooldown">
-                                <div class="stakeout-cd-title">💉 Medical</div>
-                                <div class="stakeout-cd-time" id="stakeout-cd-time-medical">Ready</div>
+                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-medical" title="Medical Cooldown (Base 6h cap, stacks up to 24h with faction perks)">
+                                <div class="stakeout-cd-header">
+                                    <span class="stakeout-cd-title">💉 Medical</span>
+                                    <span class="stakeout-cd-cap-label" id="stakeout-cd-cap-medical">Cap: ${config.medicalCapHours || 6}h</span>
+                                </div>
+                                <div class="stakeout-cd-time" id="stakeout-cd-time-medical">READY</div>
+                                <div class="stakeout-cd-sub" id="stakeout-cd-sub-medical">0m / ${config.medicalCapHours || 6}h (0%)</div>
+                                <div class="stakeout-cd-bar-wrap">
+                                    <div class="stakeout-cd-bar-fill" id="stakeout-cd-bar-fill-medical" style="width: 0%;"></div>
+                                </div>
                             </div>
-                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-booster" title="Booster Cooldown">
-                                <div class="stakeout-cd-title">🍫 Booster</div>
-                                <div class="stakeout-cd-time" id="stakeout-cd-time-booster">Ready</div>
+                            <div class="stakeout-cooldown-card ready" id="stakeout-cd-booster" title="Booster Cooldown (Base 24h cap, stacks up to 48h with faction perks)">
+                                <div class="stakeout-cd-header">
+                                    <span class="stakeout-cd-title">🍫 Booster</span>
+                                    <span class="stakeout-cd-cap-label" id="stakeout-cd-cap-booster">Cap: ${config.boosterCapHours || 24}h</span>
+                                </div>
+                                <div class="stakeout-cd-time" id="stakeout-cd-time-booster">READY</div>
+                                <div class="stakeout-cd-sub" id="stakeout-cd-sub-booster">0m / ${config.boosterCapHours || 24}h (0%)</div>
+                                <div class="stakeout-cd-bar-wrap">
+                                    <div class="stakeout-cd-bar-fill" id="stakeout-cd-bar-fill-booster" style="width: 0%;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2140,6 +2250,22 @@
                         <label class="stakeout-toggle-row" title="Plays a chime and notifies you when your Booster cooldown reaches 0s (Ready)">
                             <span>🍫 Alert on Booster Cooldown Ready</span>
                             <input type="checkbox" id="toggle-alert-booster" ${config.alertOnBoosterCooldown ? 'checked' : ''} />
+                        </label>
+                        <label class="stakeout-toggle-row" title="Configure your faction Medical Cooldown Cap (Base 6h; up to 24h with Fortitude perks)">
+                            <span>💉 Medical Cooldown Cap</span>
+                            <select id="stakeout-med-cap-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                                <option value="6" ${(config.medicalCapHours || 6) === 6 ? 'selected' : ''}>6 Hours (Base Cap)</option>
+                                <option value="12" ${(config.medicalCapHours || 6) === 12 ? 'selected' : ''}>12 Hours (Perk)</option>
+                                <option value="18" ${(config.medicalCapHours || 6) === 18 ? 'selected' : ''}>18 Hours (Perk)</option>
+                                <option value="24" ${(config.medicalCapHours || 6) === 24 ? 'selected' : ''}>24 Hours (Max Perk)</option>
+                            </select>
+                        </label>
+                        <label class="stakeout-toggle-row" title="Configure your faction Booster Cooldown Cap (Base 24h; up to 48h with Voracity perks)">
+                            <span>🍫 Booster Cooldown Cap</span>
+                            <select id="stakeout-booster-cap-select" style="background: #1e293b; border: 1px solid #475569; color: #f8fafc; padding: 2px 6px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                                <option value="24" ${(config.boosterCapHours || 24) === 24 ? 'selected' : ''}>24 Hours (Base Cap)</option>
+                                <option value="48" ${(config.boosterCapHours || 24) === 48 ? 'selected' : ''}>48 Hours (Max Perk)</option>
+                            </select>
                         </label>
                     </div>
 
@@ -2313,6 +2439,24 @@
             };
         }
 
+        const medCapSelect = document.getElementById('stakeout-med-cap-select');
+        if (medCapSelect) {
+            medCapSelect.onchange = (e) => {
+                config.medicalCapHours = parseInt(e.target.value, 10) || 6;
+                saveConfig();
+                updateCooldownBoxUI();
+            };
+        }
+
+        const boosterCapSelect = document.getElementById('stakeout-booster-cap-select');
+        if (boosterCapSelect) {
+            boosterCapSelect.onchange = (e) => {
+                config.boosterCapHours = parseInt(e.target.value, 10) || 24;
+                saveConfig();
+                updateCooldownBoxUI();
+            };
+        }
+
         const tSound = document.getElementById('toggle-sound-alarm');
         if (tSound) tSound.onchange = (e) => { config.soundAlarm = e.target.checked; saveConfig(); };
 
@@ -2426,16 +2570,23 @@
     }
 
     function formatCountdown(sec) {
-        if (sec <= 0) return 'Ready';
+        if (sec <= 0) return 'READY';
         if (sec < 60) return `${sec}s`;
         const totalMin = Math.floor(sec / 60);
         const hours = Math.floor(totalMin / 60);
         const minutes = totalMin % 60;
         const seconds = sec % 60;
         if (hours > 0) {
-            return `${hours}h ${minutes}m`;
+            return `${hours}h ${minutes}m ${seconds < 10 ? '0' : ''}${seconds}s`;
         }
         return `${minutes}m ${seconds < 10 ? '0' : ''}${seconds}s`;
+    }
+
+    function formatShortHours(sec) {
+        if (sec <= 0) return '0m';
+        if (sec < 3600) return `${Math.round(sec / 60)}m`;
+        const h = (sec / 3600).toFixed(1);
+        return `${h}h`;
     }
 
     function updateTargetCardUI(targetId) {
@@ -2929,9 +3080,9 @@
             watchlist.forEach(id => updateTargetCardUI(id));
         }, 1000);
 
-        // Initial cooldowns fetch and periodic sync every 60s
+        // Initial cooldowns fetch and periodic sync every 30s
         setTimeout(() => syncCooldownsFromApi(false), 1200);
-        setInterval(() => syncCooldownsFromApi(false), 60000);
+        setInterval(() => syncCooldownsFromApi(false), 30000);
 
         // Safe 2-second checker for profile button without any MutationObserver
         setInterval(() => {

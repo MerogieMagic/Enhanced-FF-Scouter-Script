@@ -3193,3 +3193,49 @@ Extracted directly via Torn API stock market endpoints:
     - Executed automated verification suite `verify_v118.js` (16/16 checks passed with 100% success).
   - **Date & Time**: 2026-10-19 16:15:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 128
+- **Focus**: Dynamic Energy Denominator Normalization (`15000` $\to$ `150`), Cooldown Duration Remaining vs Total Cap Tracking, and 30-Second API Polling Throttle (`torn_mercenary_stakeout.user.js` v1.19) — Resolving Torn SVG Coordinate Scaling, Remaining vs Cap Progress Bar Gauges, Faction Cooldown Cap Selectors, and 30s Safe Polling.
+  - **User Directive**:
+    - "energy numerator and denominator is kind of weird, double check it is showing 15000 max e instead of 150. It should adjust according to the actual limit."
+    - "Also for each of the boxes drug, medica and booster, show the remaining time and total cap."
+    - "one pull every 30s would suffice for this part of the trackers"
+  - **Combat & Resource Systems Analysis**:
+    1. *The 15000 Denominator Distortion Root Cause*:
+       - In Torn City's modern layout, SVG progress bars (such as circular/horizontal vitality meters) store coordinate values in attributes scaled by $100\times$ (e.g. `aria-valuemax="15000"` for $150.00$ coordinate points, and `aria-valuenow="13500"` for $135.00$).
+       - In v1.18, `getPlayerEnergyFromDom()` checked `aria-valuemax` before visible text without rescaling coordinates $> 500$, causing the denominator to render as `15000` instead of `150`.
+       - Engineered `normalizeEnergy(rawCurr, rawMax)`:
+         - Checks if maximum $> 500$; divides both by 100 if scaled in coordinate space (e.g. `15000 / 15000` $\to 150 / 150$, `13500 / 15000` $\to 135 / 150$, `10000 / 10000` $\to 100 / 100$).
+         - Dynamically preserves natural limits (100 non-donor, 150 donor/subscriber, up to 175 with company/faction perks) as well as stacked energy (e.g. $1000/150$ from Xanax or points refills).
+       - Inverted parser priority: Upgraded `getPlayerEnergyFromDom()` so Priority 1 directly matches visible text (e.g. `Energy: 135/150 00:21`), providing ground truth bypassing SVG coordinate artifacts entirely.
+    2. *Remaining Time vs Total Cap Cooldown Telemetry*:
+       - **Medical Cooldown**:
+         - Torn City base cap is 6 hours (up to 24 hours with faction Fortitude perks).
+         - Card Header displays: `Cap: 6h` (or user-configured cap).
+         - Active State: Shows live countdown (e.g. `1h 30m 00s`), subtext `1.5h / 6h (25%)`, and emerald/amber micro progress gauge fill.
+         - Ready State: Shows `READY`, subtext `0m / 6h (0%)`, and 0% gauge width.
+       - **Booster Cooldown**:
+         - Torn City base cap is 24 hours (up to 48 hours with faction Voracity perks).
+         - Card Header displays: `Cap: 24h` (or user-configured cap).
+         - Active State: Shows live countdown (e.g. `6h 00m 00s`), subtext `6.0h / 24h (25%)`, and micro progress gauge fill.
+         - Ready State: Shows `READY`, subtext `0m / 24h (0%)`, and 0% gauge width.
+       - **Drug Cooldown**:
+         - Torn City drugs have a hard non-stackable limit: players cannot consume another drug until the timer reaches `0:00`.
+         - Card Header displays: `Cap: 0s`.
+         - Active State: Shows live countdown (e.g. `7h 30m 15s`), subtext `7.5h / 8h (94%)` (measured against the standard 8-hour Xanax maximum duration), and micro progress gauge fill.
+         - Ready State: Shows `READY`, subtext `Limit: 0:00 (No Stack)`, and 0% gauge width.
+       - **Faction Perk Cap Selectors in Settings Drawer (`⚙`)**:
+         - Added `💉 Medical Cooldown Cap` dropdown with options: 6 Hours (Base Cap), 12 Hours (Perk), 18 Hours (Perk), 24 Hours (Max Perk).
+         - Added `🍫 Booster Cooldown Cap` dropdown with options: 24 Hours (Base Cap), 48 Hours (Max Perk).
+         - Instant dynamic recalculation and re-rendering across cards without needing a page reload.
+       - **Enhanced Collapsed Summary Pill**:
+         - Renders `⚡ 135/150E • 💊 Ready • 💉 1.5h/6h • 🍫 Ready`.
+    3. *30-Second API Polling Frequency*:
+       - Adjusted `syncCooldownsFromApi()` throttle from 60 seconds to 30 seconds (`30000ms`).
+       - Configured background interval in `boot()` to pull every 30 seconds (`setInterval(..., 30000)`).
+       - Rate Budget Telemetry: Consumes only 2 API calls per minute out of the 90 cpm budget (~2.2%), maintaining absolute safety alongside active target surveillance.
+  - **Verification**:
+    - Validated script and meta syntax with `node --check torn_mercenary_stakeout.user.js` and `torn_mercenary_stakeout.meta.js` (both exit code 0).
+    - Executed automated test suite `verify_v119.js` (9/9 checks passed with 100% success).
+  - **Date & Time**: 2026-10-19 16:35:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
