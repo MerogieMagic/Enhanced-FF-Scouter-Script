@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn City - Mercenary Stakeout Radar
 // @namespace    Violentmonkey Scripts
-// @version      1.09
+// @version      1.10
 // @description  Precision mercenary target stakeout radar: live multi-target tracking for hospital discharge, online activity, flight landings, absolute HP, and instant audio alarms with 1-click attack staging.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/*
@@ -25,7 +25,7 @@
     if (window.__TORN_MERCENARY_STAKEOUT_LOADED__) return;
     window.__TORN_MERCENARY_STAKEOUT_LOADED__ = true;
 
-    const SCRIPT_VERSION = "1.09";
+    const SCRIPT_VERSION = "1.10";
     const SCRIPT_RAW_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js";
     const SCRIPT_META_URL = "https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.meta.js";
 
@@ -284,19 +284,17 @@
 
     // --- 2. CONFIGURATION & STATE ---
     const DEFAULT_CONFIG = {
-        alertOnOkay: true,
-        requireActive: true,        // ⚡ 2-Condition Rule: Target must be BOTH Okay and Active (Online / action <= 5m)
+        alertOnOkay: true,          // ⚔️ Alert when target satisfies BOTH criteria (Out & Alive + Online/Action <= 5m)
+        requireActive: true,        // ⚡ Strict 2-Condition Rule Enforced
         activeThresholdMin: 5,      // 5 minutes
-        alertOnNearHosp: true,      // ⚠️ Alert when hospital countdown drops to <= 5 minutes (stage attack)
-        nearHospThresholdMin: 5,    // 5 minutes
-        alertOnLanding: true,
-        alertOnFullHp: false,
+        alertOnLanding: true,       // Alert on flight arrival (only if Out & Alive + Active)
+        alertOnFullHp: false,       // Alert on 100% HP (only if Out & Alive + Active)
         soundAlarm: true,
         alarmVolume: 1.0,           // 0.1 to 1.0 (10% to 100%)
         alarmSoundType: 'siren',    // 'siren' (loudest) | 'horn' | 'klaxon' | 'chime'
         desktopNotif: true,
         osAutoFocus: true,          // pings local focus companion on 127.0.0.1:8766
-        rapidHospPolling: true,
+        rapidHospPolling: true,     // Rapidly poll targets nearing hospital discharge (< 5m)
         pollingInterval: 5, // seconds
         isPaused: false,
         isMinimized: false
@@ -304,6 +302,9 @@
 
     let config = Object.assign({}, DEFAULT_CONFIG, getStorage('config', {}));
     delete config.autoOpenAttack;
+    delete config.alertOnNearHosp;
+    delete config.nearHospThresholdMin;
+    config.requireActive = true; // Permanently enforced per 2-Condition rule
     function saveConfig() {
         setStorage('config', config);
     }
@@ -316,7 +317,6 @@
     }
 
     const targetsCache = {};
-    const targetNearHospAlerted = {}; // tracks hospital release timestamps that already fired the <5m warning
     const callLog = [];
 
     function recordApiCall() {
@@ -759,9 +759,9 @@
 
     // --- 6. TRIGGER EVALUATION & ATTACK STAGING ENGINE ---
 
-    // Helper predicates for the 2-Condition Rule:
-    // 1. Target must be Okay and ready (attackable)
-    // 2. Target must be Online or have last action within 5 minutes
+    // Helper predicates for the Strict 2-Condition Rule:
+    // Criteria 1: Target must be Out and alive (Okay state, HP > 0, not Hospital/Jail/Traveling/Abroad/Federal/Fallen)
+    // Criteria 2: Target must be Online or have last action within 5 minutes
     function isTargetActiveWithin5Min(snapshot, nowSec = Math.floor(Date.now() / 1000)) {
         if (!snapshot) return false;
         if (snapshot.online === 'Online') return true;
@@ -784,25 +784,20 @@
         return false;
     }
 
-    function isTargetAttackReady(snapshot) {
+    function isTargetOutAndAlive(snapshot) {
         if (!snapshot) return false;
-        return snapshot.state === 'Okay';
+        // 1. Must be in Okay state (not Hospital, Jail, Traveling, Abroad, Federal, Fallen)
+        if (snapshot.state !== 'Okay') return false;
+        // 2. Must be alive (HP > 0 if available)
+        if (typeof snapshot.hpCurr === 'number' && snapshot.hpCurr <= 0) return false;
+        return true;
     }
 
-    function isTargetReadyAndActive(snapshot, nowSec = Math.floor(Date.now() / 1000)) {
-        if (!isTargetAttackReady(snapshot)) return false;
-        if (config.requireActive === false) return true;
-        return isTargetActiveWithin5Min(snapshot, nowSec);
-    }
-
-    function isTargetNearHospAndActive(snapshot, nowSec = Math.floor(Date.now() / 1000), thresholdMin = 5) {
-        if (!snapshot || snapshot.state !== 'Hospital') return false;
-        if (snapshot.until <= nowSec) return false;
-        const remainingSec = snapshot.until - nowSec;
-        const thresholdSec = thresholdMin * 60;
-        if (remainingSec > thresholdSec) return false;
-        if (config.requireActive === false) return true;
-        return isTargetActiveWithin5Min(snapshot, nowSec);
+    // Both criteria must be met:
+    // 1. Out and alive
+    // 2. Online or last action within 5 mins
+    function isTargetAttackEligible(snapshot, nowSec = Math.floor(Date.now() / 1000)) {
+        return isTargetOutAndAlive(snapshot) && isTargetActiveWithin5Min(snapshot, nowSec);
     }
 
     function evaluateTargetTriggers(targetId, freshData) {
@@ -826,82 +821,50 @@
         const previous = existing ? existing.data : null;
         const nowSec = Math.floor(Date.now() / 1000);
 
-        const isNowReadyAndActive = isTargetReadyAndActive(currentSnapshot, nowSec);
-        const wasReadyAndActive = previous ? isTargetReadyAndActive(previous, nowSec) : false;
-        const isCurrentActive = isTargetActiveWithin5Min(currentSnapshot, nowSec);
-
-        // --- 1. HOSPITAL COUNTDOWN <= 5 MINS ALERT (Pre-Stage Attack Window) ---
-        // Fires if target is in hospital with <= 5m remaining AND is active within 5m
-        if (config.alertOnNearHosp && currentSnapshot.state === 'Hospital' && currentSnapshot.until > nowSec) {
-            const remainingSec = currentSnapshot.until - nowSec;
-            const thresholdSec = (config.nearHospThresholdMin || 5) * 60;
-            const satisfiesActivity = (config.requireActive === false) || isCurrentActive;
-
-            if (remainingSec <= thresholdSec && satisfiesActivity && targetNearHospAlerted[targetId] !== currentSnapshot.until) {
-                targetNearHospAlerted[targetId] = currentSnapshot.until;
-                playStakeoutAlarm('warning');
-                const minLeft = Math.max(1, Math.ceil(remainingSec / 60));
-                startTitleFlash(`${currentSnapshot.name} HOSP < ${minLeft}M!`);
-                sendStakeoutNotification(
-                    `⚠️ ${currentSnapshot.name} Hospital < 5 Mins!`,
-                    `Release in ~${minLeft}m (${remainingSec}s). Target is active (${currentSnapshot.online})! Pre-stage attack.`
-                );
-                window.focus();
-                triggerOsAutoFocus();
-                showStakeoutToast(`⚠️ Target [${currentSnapshot.name}] hospital release in ~${minLeft}m (${remainingSec}s) & active! Stage attack.`);
-            }
-        }
-
-        // Reset near-hosp alert tracker if target leaves hospital
-        if (currentSnapshot.state !== 'Hospital' || currentSnapshot.until <= nowSec) {
-            delete targetNearHospAlerted[targetId];
-        }
+        const isNowEligible = isTargetAttackEligible(currentSnapshot, nowSec);
+        const wasEligible = previous ? isTargetAttackEligible(previous, nowSec) : false;
 
         if (previous) {
-            // --- 2. MAIN ATTACK ALARM: TARGET BECAME OKAY & ACTIVE (2-Condition Rule) ---
-            // Triggers when target transitions into satisfying BOTH:
-            // Condition 1: Target is Okay and ready
-            // Condition 2: Target is Online or last action within 5 mins
-            const becameReadyAndActive = !wasReadyAndActive && isNowReadyAndActive;
+            // --- 1. MAIN ATTACK ALARM: TARGET MET BOTH CRITERIA (Out & Alive + Online/Active <= 5m) ---
+            // Triggers ONLY when target transitions into satisfying BOTH criteria:
+            // Criteria 1: Target is Out and alive (Okay state & HP > 0)
+            // Criteria 2: Target is Online or last action within 5 mins
+            const becameEligible = !wasEligible && isNowEligible;
 
-            if (config.alertOnOkay && becameReadyAndActive) {
+            if (config.alertOnOkay && becameEligible) {
                 playStakeoutAlarm('okay');
                 startTitleFlash(`${currentSnapshot.name} READY (ACTIVE)!`);
                 sendStakeoutNotification(
-                    `⚔️ ${currentSnapshot.name} is OKAY & ACTIVE!`,
-                    `Target is attackable (Okay) and active (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})!`
+                    `⚔️ ${currentSnapshot.name} is OUT & ACTIVE!`,
+                    `Target is Out & Alive (Okay) and active (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})!`
                 );
                 window.focus();
                 triggerOsAutoFocus();
-                showStakeoutToast(`⚔️ Target [${currentSnapshot.name}] is OKAY & ACTIVE (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})! Attack now.`);
+                showStakeoutToast(`⚔️ Target [${currentSnapshot.name}] is OUT & ACTIVE (${currentSnapshot.online}, ${currentSnapshot.lastActionRel || 'within 5m'})! Attack now.`);
             }
 
-            // --- 3. FLIGHT LANDING (while active) ---
+            // --- 2. FLIGHT LANDING (Strictly requiring BOTH criteria: Out & Alive + Active) ---
             if (config.alertOnLanding && previous.state === 'Traveling' && currentSnapshot.state !== 'Traveling') {
-                if (!becameReadyAndActive) {
-                    const satisfiesActivity = (config.requireActive === false) || isCurrentActive;
-                    if (satisfiesActivity && currentSnapshot.state === 'Okay') {
-                        playStakeoutAlarm('okay');
-                        startTitleFlash(`${currentSnapshot.name} LANDED!`);
-                        sendStakeoutNotification(
-                            `${currentSnapshot.name} LANDED!`,
-                            `Flight arrived: now ${currentSnapshot.state} (${currentSnapshot.desc}) • Active: ${currentSnapshot.online}`
-                        );
-                        window.focus();
-                        triggerOsAutoFocus();
-                    }
+                if (!becameEligible && isNowEligible) {
+                    playStakeoutAlarm('okay');
+                    startTitleFlash(`${currentSnapshot.name} LANDED!`);
+                    sendStakeoutNotification(
+                        `${currentSnapshot.name} LANDED & ACTIVE!`,
+                        `Flight arrived in Torn: Out & Alive • Active: ${currentSnapshot.online}`
+                    );
+                    window.focus();
+                    triggerOsAutoFocus();
                 }
             }
 
-            // --- 4. FULL HP (while active) ---
+            // --- 3. FULL HP (Strictly requiring BOTH criteria: Out & Alive + Active) ---
             if (config.alertOnFullHp && previous.hpPct < 100 && currentSnapshot.hpPct >= 100) {
-                const satisfiesActivity = (config.requireActive === false) || isCurrentActive;
-                if (satisfiesActivity && currentSnapshot.state === 'Okay') {
+                if (!becameEligible && isNowEligible) {
                     playStakeoutAlarm('online');
                     startTitleFlash(`${currentSnapshot.name} 100% HP!`);
                     sendStakeoutNotification(
                         `${currentSnapshot.name} reached 100% HP!`,
-                        `Life fully recovered: ${currentSnapshot.hpCurr.toLocaleString()} / ${currentSnapshot.hpMax.toLocaleString()}`
+                        `Life fully recovered: ${currentSnapshot.hpCurr.toLocaleString()} / ${currentSnapshot.hpMax.toLocaleString()} • Active: ${currentSnapshot.online}`
                     );
                     window.focus();
                     triggerOsAutoFocus();
@@ -1228,15 +1191,22 @@
             background: #16a34a;
             animation: stakeoutPillPulse 1.2s infinite ease-in-out;
         }
-        .stakeout-attack-btn.stage-ready {
-            background: #b45309;
-            border-color: #f59e0b;
-            color: #fef08a !important;
-            animation: stakeoutPillPulse 1.4s infinite ease-in-out;
+        .stakeout-attack-btn.disabled {
+            background: #1e293b !important;
+            border: 1px solid #475569 !important;
+            color: #94a3b8 !important;
+            cursor: not-allowed !important;
+            box-shadow: none !important;
+            opacity: 0.8 !important;
+            font-size: 11px !important;
+            width: 100%;
+            box-sizing: border-box;
         }
-        .stakeout-attack-btn.stage-ready:hover {
-            background: #d97706;
-            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        .stakeout-attack-btn.disabled:hover {
+            background: #243046 !important;
+            border-color: #64748b !important;
+            color: #cbd5e1 !important;
+            box-shadow: none !important;
         }
 
         .stakeout-settings {
@@ -1327,9 +1297,10 @@
             document.body.appendChild(dockRoot);
         }
 
+        const nowSec = Math.floor(Date.now() / 1000);
         const readyCount = watchlist.filter(id => {
             const t = targetsCache[id]?.data;
-            return t && t.state === 'Okay';
+            return t && isTargetAttackEligible(t, nowSec);
         }).length;
 
         if (config.isMinimized) {
@@ -1378,20 +1349,12 @@
 
                 <div id="stakeout-settings-panel" class="stakeout-settings" style="display: none;">
                     <div style="font-weight: 800; color: #f8fafc; margin-bottom: 2px;">⚡ Stakeout Trigger Toggles:</div>
-                    <label class="stakeout-toggle-row" title="Requires target to meet 2 conditions: Okay & ready, AND Online or last action within 5 mins">
-                        <span>⚔️ Alert on Okay & Active (&le; 5m)</span>
+                    <label class="stakeout-toggle-row" title="Requires target to meet BOTH criteria: 1. Out & Alive, and 2. Online or last action within 5 mins">
+                        <span>⚔️ Alert on Attack Eligible (Out & Active)</span>
                         <input type="checkbox" id="toggle-alert-okay" ${config.alertOnOkay ? 'checked' : ''} />
                     </label>
-                    <label class="stakeout-toggle-row" title="Enforces that all attack alarms require target to be Online or have last action within 5 minutes">
-                        <span>⚡ Require Target Active (&le; 5 Mins)</span>
-                        <input type="checkbox" id="toggle-require-active" ${config.requireActive !== false ? 'checked' : ''} />
-                    </label>
-                    <label class="stakeout-toggle-row" title="Alerts when target has 5 minutes or less remaining in hospital and is active so you can pre-stage attack">
-                        <span>⚠️ Alert on Hospital &lt; 5 Mins (Active)</span>
-                        <input type="checkbox" id="toggle-alert-nearhosp" ${config.alertOnNearHosp ? 'checked' : ''} />
-                    </label>
-                    <label class="stakeout-toggle-row">
-                        <span>Alert on Target Flight Landing</span>
+                    <label class="stakeout-toggle-row" title="Alert on flight arrival (strictly requires target to be Out & Alive + Active in Torn)">
+                        <span>Alert on Flight Landing (Out & Active)</span>
                         <input type="checkbox" id="toggle-alert-landing" ${config.alertOnLanding ? 'checked' : ''} />
                     </label>
                     <label class="stakeout-toggle-row">
@@ -1483,12 +1446,6 @@
 
         const tOkay = document.getElementById('toggle-alert-okay');
         if (tOkay) tOkay.onchange = (e) => { config.alertOnOkay = e.target.checked; saveConfig(); };
-
-        const tReqActive = document.getElementById('toggle-require-active');
-        if (tReqActive) tReqActive.onchange = (e) => { config.requireActive = e.target.checked; saveConfig(); };
-
-        const tNearHosp = document.getElementById('toggle-alert-nearhosp');
-        if (tNearHosp) tNearHosp.onchange = (e) => { config.alertOnNearHosp = e.target.checked; saveConfig(); };
 
         const tLanding = document.getElementById('toggle-alert-landing');
         if (tLanding) tLanding.onchange = (e) => { config.alertOnLanding = e.target.checked; saveConfig(); };
@@ -1637,19 +1594,15 @@
         if (card.dataset.lastStateKey === stateKey) return;
         card.dataset.lastStateKey = stateKey;
 
-        const isReadyAndActive = isTargetReadyAndActive(d, nowSec);
-        const isNearHospAndActive = isTargetNearHospAndActive(d, nowSec, config.nearHospThresholdMin || 5);
+        const isEligible = isTargetAttackEligible(d, nowSec);
+        const isOutAndAlive = isTargetOutAndAlive(d);
         const isActive = isTargetActiveWithin5Min(d, nowSec);
 
-        card.className = `stakeout-card ${isReadyAndActive ? 'ready' : (isNearHospAndActive ? 'near-ready' : '')}`;
+        card.className = `stakeout-card ${isEligible ? 'ready' : ''}`;
 
         let statusBadge = '';
         if (d.state === 'Hospital') {
-            if (isNearHospAndActive) {
-                statusBadge = `<span class="stakeout-status-pill hospital near-ready" title="Pre-stage attack! Exact remaining: ${exactTooltip}">⚠️ STAGE! Hosp: ${formattedTime}</span>`;
-            } else {
-                statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
-            }
+            statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🏥 Hosp: ${formattedTime}</span>`;
         } else if (d.state === 'Traveling') {
             statusBadge = `<span class="stakeout-status-pill traveling" title="Exact remaining: ${exactTooltip}">✈️ ${d.desc || 'Traveling'} (${formattedTime})</span>`;
         } else if (d.state === 'Abroad') {
@@ -1658,9 +1611,9 @@
             statusBadge = `<span class="stakeout-status-pill hospital" title="Exact remaining: ${exactTooltip}">🚔 Jail: ${formattedTime}</span>`;
         } else {
             if (isActive) {
-                statusBadge = `<span class="stakeout-status-pill okay" title="Target is attackable (Okay) and active!">⚡ OKAY & ACTIVE!</span>`;
+                statusBadge = `<span class="stakeout-status-pill okay" title="Target is Out & Alive, and Active within 5m!">⚡ OUT & ACTIVE</span>`;
             } else {
-                statusBadge = `<span class="stakeout-status-pill okay-offline" title="Target is Okay, but last action was > 5 mins ago">💤 Okay (Offline)</span>`;
+                statusBadge = `<span class="stakeout-status-pill okay-offline" title="Target is Out & Alive, but inactive (> 5m ago)">💤 Okay (Inactive)</span>`;
             }
         }
 
@@ -1669,6 +1622,51 @@
         let hpBarFillClass = '';
         if (d.hpPct < 25) hpBarFillClass = 'danger';
         else if (d.hpPct < 50) hpBarFillClass = 'warning';
+
+        // Attack Button: strictly require BOTH criteria (1. Out & Alive, 2. Online or action <= 5m)
+        let attackBtnHtml = '';
+        let lockToastMsg = '';
+
+        if (isEligible) {
+            attackBtnHtml = `
+                <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ready" title="Click to attack target [${d.name}]!">
+                    <span>⚔️ ATTACK TARGET</span>
+                    <span>⚡ (READY & ACTIVE!)</span>
+                </a>
+            `;
+        } else {
+            let lockReason = '';
+            if (!isOutAndAlive) {
+                if (d.state === 'Hospital') {
+                    lockReason = `🔒 CANNOT ATTACK (In Hospital: ${formattedTime})`;
+                    lockToastMsg = `Target [${d.name}] is in Hospital! Must be Out & Alive to attack.`;
+                } else if (d.state === 'Traveling') {
+                    lockReason = `🔒 CANNOT ATTACK (Traveling: ${formattedTime})`;
+                    lockToastMsg = `Target [${d.name}] is Traveling! Must be Out & Alive to attack.`;
+                } else if (d.state === 'Abroad') {
+                    lockReason = `🔒 CANNOT ATTACK (Abroad: ${d.desc || 'Out of Torn'})`;
+                    lockToastMsg = `Target [${d.name}] is Abroad! Must be Out & Alive to attack.`;
+                } else if (d.state === 'Jail') {
+                    lockReason = `🔒 CANNOT ATTACK (In Jail: ${formattedTime})`;
+                    lockToastMsg = `Target [${d.name}] is in Jail! Must be Out & Alive to attack.`;
+                } else {
+                    lockReason = `🔒 CANNOT ATTACK (0 HP / Fallen)`;
+                    lockToastMsg = `Target [${d.name}] has 0 HP! Must be Out & Alive to attack.`;
+                }
+            } else if (!isActive) {
+                lockReason = `🔒 CANNOT ATTACK (Inactive > 5m: ${d.online})`;
+                lockToastMsg = `Target [${d.name}] is Inactive (>5m)! Must be Online or active within 5m to attack.`;
+            } else {
+                lockReason = `🔒 CANNOT ATTACK (Criteria Not Met)`;
+                lockToastMsg = `Target [${d.name}] does not meet criteria (Out & Alive + Online/Active <= 5m).`;
+            }
+
+            attackBtnHtml = `
+                <button type="button" class="stakeout-attack-btn disabled" data-attack-locked="${targetId}" title="${lockToastMsg}">
+                    <span>${lockReason}</span>
+                </button>
+            `;
+        }
 
         card.innerHTML = `
             <div class="stakeout-card-header">
@@ -1690,11 +1688,17 @@
                 <div class="stakeout-hp-text">❤️ ${d.hpCurr.toLocaleString()} / ${d.hpMax.toLocaleString()} (${d.hpPct.toFixed(d.hpPct % 1 === 0 ? 0 : 1)}%)</div>
             </div>
 
-            <a href="https://www.torn.com/page.php?sid=attack&user2ID=${targetId}" target="_blank" class="stakeout-attack-btn ${isReadyAndActive ? 'ready' : (isNearHospAndActive ? 'stage-ready' : '')}">
-                <span>⚔️ ATTACK TARGET</span>
-                ${isReadyAndActive ? '<span>⚡ (READY & ACTIVE!)</span>' : (isNearHospAndActive ? `<span>⚠️ (STAGE ~${Math.max(1, Math.ceil(remainingSec / 60))}M)</span>` : (isOkay ? '<span style="font-size: 10px; opacity: 0.85;">(Inactive)</span>' : ''))}
-            </a>
+            ${attackBtnHtml}
         `;
+
+        const lockedBtn = card.querySelector(`[data-attack-locked="${targetId}"]`);
+        if (lockedBtn && lockToastMsg) {
+            lockedBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showStakeoutToast(`⚠️ ${lockToastMsg}`);
+            };
+        }
 
         const delBtn = card.querySelector(`[data-del="${targetId}"]`);
         if (delBtn) delBtn.onclick = () => removeTarget(targetId);
@@ -1788,7 +1792,7 @@
         let rapidTargetId = null;
         if (config.rapidHospPolling) {
             const nowSec = Math.floor(Date.now() / 1000);
-            const thresholdSec = (config.nearHospThresholdMin || 5) * 60;
+            const thresholdSec = 300; // 5-minute pre-release rapid polling window
             let lowestRemaining = Infinity;
             for (const id of watchlist) {
                 const info = targetsCache[id]?.data;

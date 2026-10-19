@@ -2852,3 +2852,33 @@ Extracted directly via Torn API stock market endpoints:
        - `profile.html` is preserved in `.gitignore`.
   - **Date & Time**: 2026-10-19 09:56:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 119
+- **Focus**: Strict 2-Condition Combat Rule Hardening in Mercenary Stakeout Radar (`torn_mercenary_stakeout.user.js` v1.10) — Attack Prohibition & Complete Alert Suppression Unless Both Criteria Are Met (1. Out & Alive, 2. Online or Action $\le 5$ Minutes).
+  - **User Directive**:
+    - "adjustments to the merc radar, do not allow attacking or sending of alerts unless both criteria are met 1. Out and alive 2. Online or last action within 5mins."
+  - **Architectural & Logic Implementation**:
+    1. *Unified Predicates*:
+       - `isTargetOutAndAlive(snapshot)`: Verifies `snapshot.state === 'Okay'` and `snapshot.hpCurr > 0` (strictly rejecting Hospital, Jail, Traveling, Abroad, Federal, Fallen, or 0 HP).
+       - `isTargetActiveWithin5Min(snapshot, nowSec)`: Verifies `snapshot.online === 'Online'`, `nowSec - snapshot.lastActionTs <= 300`, or relative activity strings within 5 minutes.
+       - `isTargetAttackEligible(snapshot, nowSec)`: Evaluates `isTargetOutAndAlive && isTargetActiveWithin5Min`.
+    2. *Attack Action Prohibition (Locked Radar Attack Button)*:
+       - Previously, the attack button remained an active link `<a href="...">` allowing attacking even when targets were in hospital (with `⚠️ STAGE ~Xm`) or offline.
+       - Re-engineered the radar attack button:
+         - If `!isTargetAttackEligible`: Replaces the active anchor link with a disabled button `<button type="button" class="stakeout-attack-btn disabled" data-attack-locked="...">`. Navigation is completely prohibited.
+         - Displays descriptive lock rationale directly on the button: `🔒 CANNOT ATTACK (In Hospital: Xm)`, `🔒 CANNOT ATTACK (Traveling)`, `🔒 CANNOT ATTACK (Abroad)`, `🔒 CANNOT ATTACK (In Jail)`, `🔒 CANNOT ATTACK (0 HP)`, or `🔒 CANNOT ATTACK (Inactive > 5m: Offline)`.
+         - Clicking the locked button intercepts the event (`e.preventDefault()`, `e.stopPropagation()`) and presents an educational toast explaining exactly why the target cannot be attacked.
+         - Only when BOTH criteria are met does the button render as an active link `<a href="..." class="stakeout-attack-btn ready">` with glowing green pulse styling: `⚔️ ATTACK TARGET ⚡ (READY & ACTIVE!)`.
+    3. *Total Alert Engine Sanitization*:
+       - Completely removed the hospital countdown $< 5$ min alert (`alertOnNearHosp`) and its tracking cache `targetNearHospAlerted`. A hospitalized target is NOT "Out & Alive", so alerts while hospitalized are 100% eliminated.
+       - Main attack alarm (`alertOnOkay`), flight landing alert (`alertOnLanding`), and full HP alert (`alertOnFullHp`) strictly require `isTargetAttackEligible(currentSnapshot, nowSec)`.
+       - Alarms (audio sound, persistent desktop notification, OS autofocus companion bridge, tab title pulsing, and on-screen toast) CANNOT fire unless BOTH criteria are satisfied simultaneously.
+       - Minimized radar dock pill now evaluates `isTargetAttackEligible` so `• ⚡ X READY` only appears when targets are genuinely attackable and active.
+    4. *Settings UI & Polling Refinement*:
+       - Removed obsolete `toggle-alert-nearhosp` and `toggle-require-active` checkboxes; the 2-Condition Rule is now permanently enforced.
+       - Rapid hospital polling (`rapidHospPolling`) remains operational with a 300s window to poll targets nearing hospital discharge every 5 seconds, ensuring instantaneous detection the moment they med out/discharge while active, without alerting prematurely.
+  - **Verification**:
+    - Automated unit tests across 9 distinct target states (Hospital+Online, Hospital+Offline, Okay+Offline, Okay+Online, Okay+Idle <5m, Traveling, Abroad, Jail, Okay+0HP) — 9/9 passed.
+    - Script syntax checked via `node --check torn_mercenary_stakeout.user.js` and `node --check torn_mercenary_stakeout.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-19 10:56:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
