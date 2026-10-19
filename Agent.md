@@ -2814,3 +2814,41 @@ Extracted directly via Torn API stock market endpoints:
        - d) **Faction Group Stacking Escalation**: In faction wars, multiple simultaneous attackers build cumulative damage multipliers that eventually push past 0 damage.
   - **Date & Time**: 2026-10-19 08:58:00 +08:00
   - **Model**: Gemini Pro (Gemini 2.5 Pro)
+
+#### Session 118
+- **Focus**: Profile Signature Re-Architecture — Comprehensive Live Stats Synchronisation, Restoration & Complete Integration of the 34-War Performance Archive (20 Wins), Table-Level Compact Optimisation (<30k Chars Limit Compliance), and Dual Faction Career Cards.
+  - **User Directive**:
+    - "update my profile again with the war performance history"
+  - **Profile Architecture & Verification**:
+    1. *Live Character Stats Synchronisation (Torn API Verified, User `4054802`)*:
+       - **Account Age**: 277 Days (up from 264 Days).
+       - **Level**: 55 | **Rank**: Supreme Accomplice.
+       - **Current Faction**: Monarch HQ [8336] (`|X|`, Diamond III, 18.3M+ Respect, Spawn / Recruit, 12 days).
+       - **Heritage Faction**: KitsuLand [7251] (254 days, 14.5k Respect, 32 Wars, 19 Wins).
+       - **Employment**: Dirty Dick's- [65963] (10★ Ladies Strip Club, Male Stripper).
+       - **Ranked War Hits**: 1,191 Hits / 20 Wins (60.6% Win Rate).
+       - **Attacks Won**: 2,443 Won / 840 1-Hit Kills / 1,036+ Critical Hits.
+       - **Respect Earned**: 14,746 Respect / 6x #1 Top Contributor.
+       - **Total Awards**: 284 Awards (157 Honors • 127 Medals).
+       - **Networth**: ~$9.90 Billion ($9,900,842,487).
+       - **Racing Skill**: 22.56 (1,347 Races, 268 Wins, 1,526 Points).
+    2. *War Performance Archive Reconstruction (Wars #01 through #34)*:
+       - Restored historical Wars #01 to #31 from parsed archive.
+       - Added **War #32**: vs `Ionization [15222]` (2026-10-02, WIN 7,825 - 4,001 | 43 Hits, 765.7 Score, `#1 🏆 Top Score / Top 3 Hits` in KitsuLand).
+       - Added **War #33**: vs `Natural Selection [9533]` (2026-10-09, WIN 14,189 - 7,886 | Monarch HQ Diamond III Victory).
+       - Added **War #34 (Live)**: vs `Valor [41929]` (2026-10-15, Active / Ongoing | 11,183 - 7,204 in Monarch HQ).
+    3. *High-Efficiency Optimization Strategy for Torn's 30,000 Character Signature Limit*:
+       - An unoptimized 34-row table expanded the profile signature past 43,000–78,000 characters, causing rejection by Torn's signature parser.
+       - Optimization techniques applied:
+         - Removed absolute domain prefixes (`factions.php?step=profile&ID=...`).
+         - Converted cell padding to table-level attribute `cellpadding="3"`.
+         - Inherited typography, font sizing, and text colors from `<table>` level.
+         - Replaced heavy pill spans with lightweight `<b style="color:...">` indicators.
+         - Removed redundant per-row borders, utilizing high-contrast alternating `#191919`/`#121212` backgrounds.
+         - Fixed unclosed container nesting to guarantee 100% tag parity (70 open/close `<div>`s, 2 `<table>`s, 36 `<tr>`s, 240 `<td>`s).
+       - **Final Profile Signature Length**: **27,426 characters** (comfortably under the 30,000 character limit with ~2,574 characters of headroom).
+    4. *OPSEC & Security*:
+       - No raw battle stats or API secrets are exposed in profile or git history.
+       - `profile.html` is preserved in `.gitignore`.
+  - **Date & Time**: 2026-10-19 09:56:00 +08:00
+  - **Model**: Gemini Pro (Gemini 2.5 Pro)
