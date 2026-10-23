@@ -14,24 +14,26 @@ An all-in-one userscript for [Torn City](https://www.torn.com) combining real-ti
 
    👉 **[Click Here to Install Mercenary Stakeout Radar PC (v1.20)](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_mercenary_stakeout.user.js)** 👈
 
-   👉 **[Click Here to Install Abroad Stock Restock Alert PC (v1.20)](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_abroad_stock_alert.user.js)** 👈
+   👉 **[Click Here to Install Abroad Stock Restock Alert PC (v1.30)](https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_abroad_stock_alert.user.js)** 👈
 
 ---
 
 ### 📱 Option 2: Mobile (Torn PDA App)
 Tailored specifically to Torn PDA's native script specifications (`###PDA-APIKEY###` auto-authentication, War Mode compatibility, re-injection singleton guards, mobile touch gestures, haptic feedback, and Web Audio unlock):
 
-#### ✈️ Torn Abroad Stock Restock Alert (v1.20)
+#### ✈️ Torn Abroad Stock Restock Alert (v1.30)
 Zero-API real-time stock refill monitor for foreign shops abroad (Japan, South Africa, Switzerland, UAE, etc.):
 1. In Torn PDA, navigate to **Settings** $\rightarrow$ **Advanced** $\rightarrow$ **User Scripts**.
 2. Tap **Add Script / Link** (or `+`) and paste:
    
    👉 **`https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_abroad_stock_alert.user.js`** 👈
 
+- **Custom Item Alert / Ignore Filter**: Select exactly which items to alert for and which to mute. Includes 1-click preset `🌸 Plushies + Flowers + Xanax`, country filters, and search bar.
+- **In-Shop Direct Bell Toggles**: 1-click `🔔 Alert` / `🔕 Ignore` icons attached directly beside item names in foreign shop rows for effortless on-the-fly filtering.
 - **Zero API Quota**: Hooks into Torn's native Centrifugo WebSocket (`travelShop` -> `itemsUpdated`) and React DOM. Consumes 0 API calls and 0 extra network bandwidth.
 - **Dedicated Xanax Triumph Fanfare**: Plays a triumphant 4-note ascending fanfare when Xanax restocks in South Africa, plus standard double-beep for plushies/flowers/weapons.
 - **Microsecond Restock Audio & Toast**: Audible alert + visual toast banner + item card green/gold glow outline.
-- **Auto Update Checking**: Built-in 24h background auto-check and 1-tap `🔄 v1.20` on the status HUD.
+- **Auto Update Checking**: Built-in 24h background auto-check and 1-tap `🔄 v1.30` on the status HUD.
 
 #### 🎯 Torn PDA - Mercenary Stakeout Radar (v1.03 Lightweight)
 Ultra-lightweight mobile surveillance radar for hospital exits, flight arrivals, and online activity:

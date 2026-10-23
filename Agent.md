@@ -3621,6 +3621,44 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-23 18:56:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 140
+- **Focus**: Selective Restock Alert Filter, In-Shop Direct Bell Toggles, Interactive Filter Modal & Preset Controls (`torn_abroad_stock_alert.user.js` v1.30 & `torn_abroad_stock_alert.meta.js` v1.30).
+  - **User Directive**:
+    - "perhaps we can add a list to select which to alert for and which to ignore"
+  - **Architectural Implementation**:
+    1. *Selective Item Filter Architecture & Storage*:
+       - Added `ignoredItems: {}` to `DEFAULT_CONFIG` stored in `localStorage` and `safeStorageSet`.
+       - Implemented `isItemIgnored(itemId, name)` supporting resilient multi-type matching (integer ID, string ID, and normalized lowercase name).
+       - Implemented `setItemIgnored(itemId, ignored, name)` providing instant persistence across browser reloads.
+       - Edge-trigger filter guard in `handleRestock(itemId, newStock, prevStock, country)`: If `isItemIgnored(key, itemName)` evaluates true, audio playback, visual toast, and DOM glow are completely suppressed (with silent console trace), preventing unwanted notifications for low-value stock refills.
+    2. *Interactive Filter Manager Modal (`openItemFilterModal`)*:
+       - Accessible via `[📋 Filter]` button directly on the bottom-right HUD pill or from the browser extension menu command (`📋 Configure Alert / Ignore Items`).
+       - Styled in high-contrast dark theme with backdrop blur (`#0f172a`, `rgba(255,255,255,0.18)` border).
+       - **1-Click Presets**:
+         - `🌸 Plushies + Flowers + Xanax`: Immediately un-mutes Plushies, Flowers, and Xanax across all destinations while muting weapons, clothing, and cheap consumables.
+         - `🔔 Alert All`: Clears all ignores, enabling restock alarms for every item.
+         - `🔕 Mute All`: Mutes all items, allowing selective item-by-item opt-in.
+       - **Destination & Search Navigation**:
+         - Country selector dropdown (`📍 Current (e.g. Japan)`, individual country views, or `🌍 All Abroad Shops`).
+         - Real-time search filter matching item names and category keywords.
+       - **Rich Item Cards**:
+         - Displays official Torn item image thumbnail (`/images/items/{id}/small.png`).
+         - Displays color-coded category pills (`🌸 Plushie`, `🌺 Flower`, `💊 Drug`, `⚔️ Melee`, `📦 Other`) and country origins.
+         - Interactive status pills (`🔔 Alerting` $\leftrightarrow$ `🔕 Ignored`) updating state and triggering instant feedback toasts.
+    3. *In-Shop In-Line Toggle Icons*:
+       - In `scanDomShopItems()`, injects a discreet mini `🔔` / `🔕` toggle icon immediately beside each item's name button on Torn's native React abroad shop rows.
+       - Allows the player to toggle any item on or off in real-time directly while browsing the store without opening any modal drawers.
+    4. *Version Bump & HUD Polish*:
+       - Bumped version to **v1.30** across `torn_abroad_stock_alert.user.js` and `torn_abroad_stock_alert.meta.js`.
+       - Added `[📋 Filter]` button to `#torn-abroad-stock-hud` alongside `[🔊 Test]`, `[💊 Xanax]`, and `[🔄 v1.30]`.
+       - Registered `GM_registerMenuCommand('📋 Configure Alert / Ignore Items', openItemFilterModal)`.
+       - Updated `README.md` with v1.30 installation links and feature documentation.
+  - **Verification**:
+    - Validated syntax with `node --check torn_abroad_stock_alert.user.js torn_abroad_stock_alert.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-23 19:10:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
