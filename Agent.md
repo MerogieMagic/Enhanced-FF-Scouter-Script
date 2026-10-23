@@ -3658,6 +3658,32 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-23 19:10:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 141
+- **Focus**: Immediate Reversion to Proven Stable v1.20 & React DOM Mutation Post-Mortem (`torn_abroad_stock_alert.user.js` v1.20 & `torn_abroad_stock_alert.meta.js` v1.20).
+  - **User Directive**:
+    - "last update broke the script, revert it back to 1.2"
+  - **Root Cause Diagnosis & Technical Learnings**:
+    1. *React Virtual DOM Reconciliation Conflict*:
+       - In v1.30, `scanDomShopItems()` attempted to insert a custom DOM node (`rowToggle`) directly into `nameBtn.parentNode` inside Torn's travel shop rows (`div[class*="row___"]`).
+       - As documented in Sessions 13, 14, and 16 regarding Torn's React-rendered war and faction tables, injecting custom physical elements directly into React's managed component tree breaks React 19 fiber reconciliation (`react-dom.19.2.0`), throwing internal reconciliation errors, preventing DOM updates, or freezing component state.
+    2. *Resolution*:
+       - Strictly adhere to non-invasive DOM practices: never insert elements inside React's internal item rows. Keep custom UI completely quarantined inside external floating layers (`#torn-abroad-stock-hud`, `#torn-abroad-restock-toast`) and use read-only DOM inspection.
+  - **Reversion Actions**:
+    1. Reverted [`torn_abroad_stock_alert.user.js`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/torn_abroad_stock_alert.user.js), [`torn_abroad_stock_alert.meta.js`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/torn_abroad_stock_alert.meta.js), and [`README.md`](file:///c:/Users/kiat_/Documents/antigravity/joyful-planck/README.md) back to stable commit `2fc241d` (v1.20).
+    2. Restored clean, tested v1.20 state:
+       - Tier 1: Microsecond native Centrifugo WebSocket listener (`travelShop` -> `itemsUpdated`).
+       - Tier 2: Non-invasive read-only React DOM observer on `#travel-root`.
+       - Dual sound engine: Dedicated 4-note ascending Xanax triumph fanfare + standard double-beep.
+       - Gold and green toast notifications with temporary outline glows.
+       - Floating HUD pill (`#torn-abroad-stock-hud`) with dual audio preview buttons (`[🔊 Test]` and `[💊 Xanax]`) and update checker (`[🔄 v1.20]`).
+       - In-script 24h background auto-check engine and Violentmonkey/Tampermonkey menu commands.
+    3. Committed and pushed cleanly to `origin main` on GitHub (`MerogieMagic/Enhanced-FF-Scouter-Script`).
+  - **Verification**:
+    - Syntax verified with `node --check torn_abroad_stock_alert.user.js torn_abroad_stock_alert.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-23 19:15:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
