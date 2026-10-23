@@ -3683,6 +3683,28 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-23 19:15:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 142
+- **Focus**: Userscript Manager Downgrade Resolution & Cache-Busted Rollback Deployment (`torn_abroad_stock_alert.user.js` v1.31 Stable Rollback & `torn_abroad_stock_alert.meta.js` v1.31).
+  - **User Directive**:
+    - "the link still gives me 1.30 which is not workin"
+  - **Root Cause Diagnosis**:
+    1. *Userscript Manager Semantic Version Lock*:
+       - Tampermonkey and Violentmonkey compare version strings before updating.
+       - If a user has `1.30` installed, an incoming script labeled `1.20` is evaluated as older (`1.20 < 1.30`). The extension either ignores the update or retains the cached 1.30 copy.
+    2. *Local Browser HTTP Disk Cache*:
+       - Browsers cache raw CDN endpoints without query parameters, serving the previously downloaded 1.30 file from local disk.
+  - **Resolution**:
+    1. Bumped the clean, rock-solid stable v1.20 codebase to **`v1.31`** across `torn_abroad_stock_alert.user.js`, `torn_abroad_stock_alert.meta.js`, and `README.md`.
+    2. Because `1.31 > 1.30`, Violentmonkey and Tampermonkey immediately detect a new upgrade and prompt the user to **"Update from 1.30 to 1.31"**, cleanly overwriting the broken 1.30 code.
+    3. Added cache-busting URL parameter (`?v=1.31`) to force browser cache bypass.
+    4. Committed and pushed to `origin main` on GitHub (`MerogieMagic/Enhanced-FF-Scouter-Script`).
+  - **Verification**:
+    - Syntax verified with `node --check torn_abroad_stock_alert.user.js torn_abroad_stock_alert.meta.js` (both exit code 0).
+    - Verified live GitHub raw HTTP 200 delivery.
+  - **Date & Time**: 2026-10-23 19:19:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 

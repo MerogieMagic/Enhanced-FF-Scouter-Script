@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Abroad Stock Restock Alert
 // @namespace    https://github.com/MerogieMagic/Enhanced-FF-Scouter-Script
-// @version      1.20
+// @version      1.31
 // @description  Zero-API real-time stock refill monitor for Torn abroad shops (Japan, South Africa, Switzerland, etc.). Hooks directly into Torn's native Centrifugo WebSocket ("travelShop" -> "itemsUpdated") and React DOM for sub-millisecond restock beep alerts with dedicated Xanax fanfare.
 // @author       Merogie & Antigravity
 // @match        https://www.torn.com/index.php*
@@ -33,7 +33,7 @@
   }
   pageWindow.__TORN_ABROAD_STOCK_ALERT_ACTIVE__ = true;
 
-  const SCRIPT_VERSION = '1.20';
+  const SCRIPT_VERSION = '1.31';
   const SCRIPT_RAW_URL = 'https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_abroad_stock_alert.user.js';
 
   // ---------------- Storage & Polyfill Helpers ----------------
