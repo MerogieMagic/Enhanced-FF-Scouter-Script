@@ -1,12 +1,10 @@
 // ==UserScript==
 // @name         Torn Abroad Stock Restock Alert
 // @namespace    https://github.com/MerogieMagic/Enhanced-FF-Scouter-Script
-// @version      1.31
+// @version      1.32
 // @description  Zero-API real-time stock refill monitor for Torn abroad shops (Japan, South Africa, Switzerland, etc.). Hooks directly into Torn's native Centrifugo WebSocket ("travelShop" -> "itemsUpdated") and React DOM for sub-millisecond restock beep alerts with dedicated Xanax fanfare.
 // @author       Merogie & Antigravity
-// @match        https://www.torn.com/index.php*
 // @match        https://www.torn.com/page.php?sid=travel*
-// @match        https://torn.com/index.php*
 // @match        https://torn.com/page.php?sid=travel*
 // @run-at       document-end
 // @grant        unsafeWindow
@@ -22,6 +20,20 @@
 (() => {
   'use strict';
 
+  // Strict page guard: only enable and run on https://www.torn.com/page.php?sid=travel*
+  function isTravelPage() {
+    try {
+      const loc = window.location;
+      return loc.pathname.includes('page.php') && loc.search.includes('sid=travel');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (!isTravelPage()) {
+    return; // Completely disable and exit on all other pages
+  }
+
   const pageWindow = (typeof unsafeWindow !== 'undefined' ? unsafeWindow : window);
 
   // Singleton guard against duplicate injection in Torn PDA / single page navigation
@@ -33,7 +45,7 @@
   }
   pageWindow.__TORN_ABROAD_STOCK_ALERT_ACTIVE__ = true;
 
-  const SCRIPT_VERSION = '1.31';
+  const SCRIPT_VERSION = '1.32';
   const SCRIPT_RAW_URL = 'https://raw.githubusercontent.com/MerogieMagic/Enhanced-FF-Scouter-Script/main/torn_abroad_stock_alert.user.js';
 
   // ---------------- Storage & Polyfill Helpers ----------------
@@ -832,12 +844,13 @@
 
   // ---------------- Boot & Lifecycle ----------------
   function boot() {
+    if (!isTravelPage()) return;
     autoCheckForUpdates();
 
     if (!isAbroad()) {
       // Check again shortly in case attributes are mounting
       setTimeout(() => {
-        if (isAbroad()) boot();
+        if (isTravelPage() && isAbroad()) boot();
       }, 1000);
       return;
     }
@@ -850,18 +863,21 @@
 
     // Interval heartbeat as secondary safety
     setInterval(() => {
+      if (!isTravelPage()) return;
       if (!wsHooked) tryHookWebsocketHandler();
       scanDomShopItems();
     }, 1000);
   }
 
   pageWindow.__TORN_ABROAD_STOCK_ALERT_RECHECK__ = () => {
-    boot();
+    if (isTravelPage()) boot();
   };
 
   ['popstate', 'hashchange', 'pageshow'].forEach((evt) => {
     window.addEventListener(evt, () => {
-      setTimeout(() => boot(), 300);
+      if (isTravelPage()) {
+        setTimeout(() => boot(), 300);
+      }
     });
   });
 

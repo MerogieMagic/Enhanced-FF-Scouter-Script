@@ -3704,6 +3704,30 @@ Extracted directly via Torn API stock market endpoints:
   - **Date & Time**: 2026-10-23 19:19:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
 
+#### Session 143
+- **Focus**: Strict URL Scope Isolation — Dedicated `page.php?sid=travel*` Execution (`torn_abroad_stock_alert.user.js` v1.32 & `torn_abroad_stock_alert.meta.js` v1.32).
+  - **User Directive**:
+    - "only enable / run the script on this page, disable on all other pages. https://www.torn.com/page.php?sid=travel"
+  - **Architectural Implementation**:
+    1. *Header `@match` Restriction*:
+       - Completely stripped `https://www.torn.com/index.php*` and `https://torn.com/index.php*` from both `.user.js` and `.meta.js`.
+       - Userscript manager now matches strictly on:
+         `https://www.torn.com/page.php?sid=travel*`
+         `https://torn.com/page.php?sid=travel*`
+    2. *Runtime Execution Gate (`isTravelPage`)*:
+       - Implemented `isTravelPage()` to verify both pathname (`page.php`) and query string (`sid=travel`).
+       - Placed an immediate guard at the top of the IIFE: `if (!isTravelPage()) return;`.
+       - Integrated guards inside `boot()`, the 1-second interval heartbeat, the singleton recheck handler, and browser history listeners (`popstate`, `hashchange`, `pageshow`).
+       - On any other Torn page (City, Gym, Bounties, Attack, Hospital), the script terminates instantly without injecting any DOM elements, attaching observers, or scheduling timers.
+    3. *Version Bump & Deployment*:
+       - Bumped version to **v1.32** across `torn_abroad_stock_alert.user.js`, `torn_abroad_stock_alert.meta.js`, and `README.md`.
+       - Committed and pushed to `origin main` on GitHub (`MerogieMagic/Enhanced-FF-Scouter-Script`).
+  - **Verification**:
+    - Syntax verified with `node --check torn_abroad_stock_alert.user.js torn_abroad_stock_alert.meta.js` (both exit code 0).
+  - **Date & Time**: 2026-10-23 19:42:00 +08:00
+  - **Model**: Gemini Flash (Gemini 3.8 Flash)
+
+
 
 
 
