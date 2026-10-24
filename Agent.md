@@ -3725,15 +3725,41 @@ Extracted directly via Torn API stock market endpoints:
   - **Verification**:
     - Syntax verified with `node --check torn_abroad_stock_alert.user.js torn_abroad_stock_alert.meta.js` (both exit code 0).
   - **Date & Time**: 2026-10-23 19:42:00 +08:00
+#### Session 144
+- **Focus**: Mobile Torn PDA Compatibility Analysis & Multi-Platform Push Notification Architecture (Discord, Telegram, WhatsApp).
+  - **User Directives**:
+    1. "would the alert work on tornpda too?"
+    2. "possible to send me an alert via discord or whatsapp or telegram?"
+  - **Investigation & Technical Findings**:
+    1. *Torn PDA Execution Environment*:
+       - Torn PDA incorporates an in-app browser powered by Flutter (`flutter_inappwebview`) utilizing Android System WebView / iOS WKWebView.
+       - Userscripts are injected into Torn's pages upon matching URL criteria.
+       - When viewing `https://www.torn.com/page.php?sid=travel`, Torn loads its full React 19 single-page app bundle and initiates the Centrifugo WebSocket connection (`window.WebsocketHandler`).
+       - *Active Foreground Operation*: While Torn PDA is open and active on screen, the script functions properly. WebSocket events are caught with sub-millisecond latency, and audio alarms play (once primed via user tap). Haptic feedback can also be triggered via `navigator.vibrate` on Android devices.
+       - *Mobile OS Background Suspension Constraint*: Mobile operating systems (iOS and Android) aggressively freeze background WebView JavaScript execution threads and sever idle WebSockets within 15–30 seconds of the app being minimized or the screen locking to conserve battery and memory. Consequently, **no userscript in any mobile browser or wrapper can reliably trigger alarms while the phone is locked in your pocket**.
+    2. *External Push Notification Solutions*:
+       - To receive alerts on mobile while away from the screen or when the phone is locked, the userscript running on an active tab (PC, laptop, or desk tablet) can dispatch instant push webhooks.
+       - Platform comparison:
+         - **Discord Webhook (Premier & Recommended)**:
+           - *Setup*: Zero bots or hosting needed. Create a private Discord channel -> Channel Settings -> Integrations -> Webhooks -> Copy Webhook URL.
+           - *Delivery*: Dispatches an HTTP POST request containing a rich JSON embed (Item Name, Refill Amount, Location, Timestamp, and optional `@everyone` or `<@userID>` ping).
+           - *Notification*: The official Discord mobile app delivers high-priority lockscreen push notifications with sound, vibration, and banner alerts.
+           - *Cost & Rate Limits*: 100% Free, 30 requests/minute (more than sufficient for restocks).
+         - **Telegram Bot API (Excellent Alternative)**:
+           - *Setup*: Create a personal bot via `@BotFather` (generates bot token) and retrieve personal Chat ID via `@userinfobot`.
+           - *Delivery*: Dispatches an HTTP POST to `https://api.telegram.org/bot<TOKEN>/sendMessage`.
+           - *Notification*: The official Telegram mobile app pushes notifications instantly.
+           - *Cost & Rate Limits*: 100% Free, no server hosting required.
+         - **WhatsApp (Less Practical)**:
+           - Meta provides no direct, free personal webhooks for standard WhatsApp accounts.
+           - Requires either 3rd-party relay services (e.g. CallMeBot with rate limits and external dependency) or paid business API (Twilio). Discord and Telegram are dramatically superior in reliability, privacy, and speed.
+    3. *Architecture for Push Integration*:
+       - Grants: Add `@connect discord.com` and `@connect api.telegram.org` to GM metadata.
+       - Storage: `config.discordWebhookUrl`, `config.telegramBotToken`, `config.telegramChatId`.
+       - Menu Controls: GM menu items to set/update Webhook URL / Bot tokens, plus a "Send Test Alert" button.
+       - HUD Integration: Quick indicator showing webhook status (e.g. 🔔 Webhook: Active / Not Set).
+       - Throttling: 30-second deduplication cooldown per item to prevent duplicate alert spamming.
+       - Mobile Haptics: Add `navigator.vibrate([150, 100, 150, 100, 300])` for Xanax on compatible WebViews.
+  - **Date & Time**: 2026-10-24 09:35:00 +08:00
   - **Model**: Gemini Flash (Gemini 3.8 Flash)
-
-
-
-
-
-
-
-
-
-
 
